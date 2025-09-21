@@ -23,7 +23,7 @@ typedef struct {
     int (*read)(AudioInterface* self, short* buffer, size_t frame_size);
     int (*write)(AudioInterface* self, short* buffer, size_t frame_size);
     int (*record)(AudioInterface* self);
-    int (*play)(AudioInterface* self);
+    int (*init_play)(AudioInterface* self);
     bool (*is_play_buffer_empty)(AudioInterface* self);
     int (*destroy)(AudioInterface* self);
 } AudioInterfaceVTable;
@@ -79,7 +79,7 @@ int audio_interface_record(AudioInterface* self);
 /**
  * Start playing
  */
-int audio_interface_play(AudioInterface* self);
+int audio_interface_init_play(AudioInterface* self);
 
 /**
  * Check if play buffer is empty

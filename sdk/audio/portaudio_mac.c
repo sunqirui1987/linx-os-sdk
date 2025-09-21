@@ -47,7 +47,7 @@ static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_r
 static int portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_size);
 static int portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size);
 static int portaudio_mac_record(AudioInterface* self);
-static int portaudio_mac_play(AudioInterface* self);
+static int portaudio_mac_init_play(AudioInterface* self);
 static bool portaudio_mac_is_play_buffer_empty(AudioInterface* self);
 static int portaudio_mac_destroy(AudioInterface* self);
 
@@ -58,7 +58,7 @@ static const AudioInterfaceVTable portaudio_mac_vtable = {
     .read = portaudio_mac_read,
     .write = portaudio_mac_write,
     .record = portaudio_mac_record,
-    .play = portaudio_mac_play,
+    .init_play = portaudio_mac_init_play,
     .is_play_buffer_empty = portaudio_mac_is_play_buffer_empty,
     .destroy = portaudio_mac_destroy
 };
@@ -412,7 +412,7 @@ static int portaudio_mac_record(AudioInterface* self) {
     return 0; // Success
 }
 
-static int portaudio_mac_play(AudioInterface* self) {
+static int portaudio_mac_init_play(AudioInterface* self) {
     if (!self || !self->impl_data) {
         LOG_ERROR("Invalid audio interface");
         return -1;

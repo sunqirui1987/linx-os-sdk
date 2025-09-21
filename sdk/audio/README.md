@@ -343,7 +343,7 @@ int main() {
     audio_interface_record(audio);
     
     // 开始播放
-    audio_interface_play(audio);
+    audio_interface_init_play(audio);
     
     // 音频数据缓冲区
     short buffer[1024 * 2]; // 1024帧 * 2声道
@@ -375,7 +375,7 @@ int main() {
 - `bool audio_interface_read(AudioInterface* self, short* buffer, size_t frame_size)` - 读取音频数据
 - `bool audio_interface_write(AudioInterface* self, short* buffer, size_t frame_size)` - 写入音频数据
 - `void audio_interface_record(AudioInterface* self)` - 开始录音
-- `void audio_interface_play(AudioInterface* self)` - 开始播放
+- `void audio_interface_init_play(AudioInterface* self)` - 开始播放
 - `void audio_interface_destroy(AudioInterface* self)` - 销毁音频接口
 
 #### 配置参数
@@ -644,7 +644,7 @@ int test_my_platform() {
     
     // 测试录音和播放
     audio_interface_record(audio);
-    audio_interface_play(audio);
+    audio_interface_init_play(audio);
     
     // 清理
     audio_interface_destroy(audio);

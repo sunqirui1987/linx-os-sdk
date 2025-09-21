@@ -54,7 +54,7 @@ int test_audio_record_play() {
     
     // Start playback
     printf("Starting playback...\n");
-    audio_interface_play(audio);
+    audio_interface_init_play(audio);
     
     if (!audio->is_playing) {
         printf("Failed to start playback\n");

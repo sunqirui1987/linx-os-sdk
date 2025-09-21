@@ -9,7 +9,7 @@ static void audio_stub_set_config(AudioInterface* self, unsigned int sample_rate
 static int audio_stub_read(AudioInterface* self, short* buffer, size_t frame_size);
 static int audio_stub_write(AudioInterface* self, short* buffer, size_t frame_size);
 static int audio_stub_record(AudioInterface* self);
-static int audio_stub_play(AudioInterface* self);
+static int audio_stub_init_play(AudioInterface* self);
 static bool audio_stub_is_play_buffer_empty(AudioInterface* self);
 static int audio_stub_destroy(AudioInterface* self);
 
@@ -20,7 +20,7 @@ static const AudioInterfaceVTable audio_stub_vtable = {
     .read = audio_stub_read,
     .write = audio_stub_write,
     .record = audio_stub_record,
-    .play = audio_stub_play,
+    .init_play = audio_stub_init_play,
     .is_play_buffer_empty = audio_stub_is_play_buffer_empty,
     .destroy = audio_stub_destroy
 };
@@ -105,7 +105,7 @@ static int audio_stub_record(AudioInterface* self) {
     return 0; // Success
 }
 
-static int audio_stub_play(AudioInterface* self) {
+static int audio_stub_init_play(AudioInterface* self) {
     if (!self) return -1;
     
     AudioStubData* data = (AudioStubData*)self->impl_data;

@@ -259,10 +259,10 @@ static bool init_demo(const char* server_url) {
     audio_format_init(&format, g_demo.sample_rate, g_demo.channels, 16, 20);
 
 
-    if (audio_interface_play(g_demo.audio_interface) != 0) {
+    if (audio_interface_init_play(g_demo.audio_interface) != 0) {
         LOG_ERROR("✗ 启动播放流失败");
         return false;
-}
+    }
     
     g_demo.opus_encoder = opus_codec_create();
     g_demo.opus_decoder = opus_codec_create();

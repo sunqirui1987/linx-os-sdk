@@ -55,12 +55,12 @@ int audio_interface_record(AudioInterface* self) {
     return self->vtable->record(self);
 }
 
-int audio_interface_play(AudioInterface* self) {
-    if (!self || !self->vtable || !self->vtable->play) {
+int audio_interface_init_play(AudioInterface* self) {
+    if (!self || !self->vtable || !self->vtable->init_play) {
         LOG_ERROR("Invalid audio interface or vtable");
        return -1;
     }
-    return self->vtable->play(self);
+    return self->vtable->init_play(self);
 }
 
 bool audio_interface_is_play_buffer_empty(AudioInterface* self) {
@@ -72,7 +72,7 @@ bool audio_interface_is_play_buffer_empty(AudioInterface* self) {
 }
 
 int audio_interface_destroy(AudioInterface* self) {
-    if (!self || !self->vtable || !self->vtable->play) {
+    if (!self || !self->vtable || !self->vtable->destroy) {
         LOG_ERROR("Invalid audio interface or vtable");
        return -1;
     }
