@@ -1,0 +1,6 @@
+demo/mac/build
+sdk/audio/test/build
+sdk/build
+sdk/codecs/test/build
+sdk/mcp/test/build
+sdk/protocols/test/build
