@@ -336,11 +336,13 @@ show_help() {
     echo "                        Available toolchains:"
     echo "                          ${CMAKE_DIR}/toolchains/arm-linux-gnueabihf.cmake"
     echo "                          ${CMAKE_DIR}/toolchains/esp32.cmake"
+    echo "                          ${CMAKE_DIR}/toolchains/riscv32-linux-musl.cmake"
     echo "  --help               Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                                           # Build for host platform"
     echo "  $0 --toolchain cmake/toolchains/arm-linux-gnueabihf.cmake  # Cross-compile for ARM"
+    echo "  $0 --toolchain cmake/toolchains/riscv32-linux-musl.cmake   # Cross-compile for RISC-V 32-bit"
     echo ""
 }
 
