@@ -42,6 +42,7 @@
         "istream": "cpp",
         "streambuf": "cpp",
         "unordered_map": "cpp",
-        "cstddef": "cpp"
+        "cstddef": "cpp",
+        "initializer_list": "c"
     }
 }

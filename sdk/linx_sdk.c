@@ -879,16 +879,19 @@ static void _linx_sdk_on_websocket_message(const cJSON* root, void* user_data) {
  * @see LinxEvent
  */
 static void _linx_sdk_on_websocket_audio_data(linx_audio_stream_packet_t* packet, void* user_data) {
+    //LOG_INFO("[%s] Audio packet: %d bytes", __FUNCTION__, packet->payload_size);
     LinxSdk* sdk = (LinxSdk*)user_data;
     if (!sdk || !packet) return;
-    
+
+
     LOG_DEBUG("收到音频数据: %zu 字节", packet->payload_size);
     
     // 这里可以处理音频数据，例如播放TTS音频
     // 触发TTS相关事件
     LinxEvent event = {
         .type = LINX_EVENT_AUDIO_DATA,
-        .timestamp = time(NULL)
+        .timestamp = time(NULL),
+        .data.audio_data.value = packet
     };
     
     if (sdk->event_callback) {

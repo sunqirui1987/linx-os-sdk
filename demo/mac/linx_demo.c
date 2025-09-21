@@ -146,8 +146,8 @@ static void event_handler(const LinxEvent* event, void* user_data) {
             break;
             
         case LINX_EVENT_AUDIO_DATA:
-            LOG_DEBUG("♪ 收到音频数据: %zu 字节", event->data.audio_data.size);
-            play_audio(event->data.audio_data.data, event->data.audio_data.size);
+            LOG_INFO("♪ 收到音频数据: %zu 字节", event->data.audio_data.value->payload_size);
+            play_audio(event->data.audio_data.value->payload, event->data.audio_data.value->payload_size);
             break;
             
         case LINX_EVENT_TEXT_MESSAGE:
@@ -174,7 +174,9 @@ static void event_handler(const LinxEvent* event, void* user_data) {
         case LINX_EVENT_STATE_CHANGED:
             LOG_INFO("🔧 状态改变: 老状态 %d 新状态 %d", event->data.state_changed.old_state, event->data.state_changed.new_state);
             break;
-            
+        case LINX_EVENT_EMOTION_MESSAGE:
+            LOG_INFO("😊 表情消息: %s", event->data.emotion.value);
+            break;
         default:
             LOG_WARN("? 未知事件类型: %d", event->type);
             break;

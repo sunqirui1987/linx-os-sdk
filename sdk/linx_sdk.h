@@ -113,43 +113,51 @@ typedef struct {
     LinxEventType type;
     time_t timestamp;
     union {
+        // 状态改变事件
         struct {
             LinxDeviceState old_state;
             LinxDeviceState new_state;
         } state_changed;
         
+        // 文本事件
         struct {
             char* text;
             char* role;  // "user", "assistant"
         } text_message;
 
+        // 自定义事件
         struct {
             char* value;
         }custom_message;// 自定义事件
 
+        // 表情事件
         struct {
             char* value;  
         } emotion;
         
+        // 音频数据
         struct {
-            uint8_t* data;
-            size_t size;
+            linx_audio_stream_packet_t* value; // 音频数据
         } audio_data;
         
+        // 错误事件
         struct {
             char* message;
             int code;
         } error;
         
+        // 会话建立事件
         struct {
             char* session_id;
         } session_established;
         
+        // MCP消息
         struct {
             char* message;
             char* type;
         } mcp_message;
         
+        // 系统消息
         struct {
             char* message;
         } system_message;

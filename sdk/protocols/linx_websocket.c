@@ -432,6 +432,7 @@ static void linx_websocket_event_handler(struct mg_connection* conn, int ev, voi
                             }
                         }
                     } else {
+                        
                         /* Fallback for unsupported protocol versions - treat as raw audio data */
                         linx_audio_stream_packet_t* packet = linx_audio_stream_packet_create(wm->data.len);
                         if (packet) {
@@ -440,6 +441,7 @@ static void linx_websocket_event_handler(struct mg_connection* conn, int ev, voi
                             packet->timestamp = 0;
                             memcpy(packet->payload, wm->data.buf, wm->data.len);
                             
+                            LOG_DEBUG("[%s] Audio packet: %d bytes", __func__, wm->data.len);
                             ws_protocol->base.callbacks.on_incoming_audio(packet, ws_protocol->base.callbacks.user_data);
                             linx_audio_stream_packet_destroy(packet);
                         }
