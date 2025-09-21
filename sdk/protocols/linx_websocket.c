@@ -71,6 +71,8 @@ linx_websocket_protocol_t* linx_websocket_protocol_create(const linx_websocket_c
     /* Initialize base protocol */
     linx_protocol_init(&ws_protocol->base, &linx_websocket_vtable);
     
+    //设置log等级
+    mg_log_set(MG_LL_INFO);
     /* Initialize mongoose manager */
     mg_mgr_init(&ws_protocol->mgr);
     

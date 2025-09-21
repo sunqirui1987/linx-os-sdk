@@ -235,11 +235,13 @@ static bool init_demo(const char* server_url) {
         return false;
     }
     
-    // 配置音频参数
-    audio_interface_set_config(g_demo.audio_interface, g_demo.sample_rate, g_demo.frame_size, 
-                              g_demo.channels, 2, 1024, 256);
-    
+    // 先初始化音频接口（初始化PortAudio）
     audio_interface_init(g_demo.audio_interface);
+    
+    // 再配置音频参数（需要在PortAudio初始化后才能获取默认设备）
+    audio_interface_set_config(g_demo.audio_interface, g_demo.sample_rate, g_demo.frame_size, 
+                              g_demo.channels, 4, 8192, 2048);
+
     
     // 初始化Opus编解码器
     audio_format_t format = {0};
@@ -557,6 +559,16 @@ static void print_usage(const char* program_name) {
  */
 int main(int argc, char* argv[]) {
     const char* server_url = DEFAULT_SERVER_URL;
+
+      // 初始化日志系统
+    log_config_t log_config = LOG_DEFAULT_CONFIG;
+    log_config.level = LOG_LEVEL_INFO;  // 默认INFO级别
+    log_config.enable_timestamp = true;
+    log_config.enable_color = true;
+    if (log_init(&log_config) != 0) {
+        LOG_ERROR("日志系统初始化失败");
+        return 0;
+    }
     
     // 设置信号处理
     signal(SIGINT, signal_handler);

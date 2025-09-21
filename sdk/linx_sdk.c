@@ -53,16 +53,7 @@ LinxSdk* linx_sdk_create(const LinxSdkConfig* config) {
         return NULL;
     }
     
-    // 初始化日志系统
-    log_config_t log_config = LOG_DEFAULT_CONFIG;
-    log_config.level = LOG_LEVEL_DEBUG;  // 默认INFO级别
-    log_config.enable_timestamp = true;
-    log_config.enable_color = true;
-    if (log_init(&log_config) != 0) {
-        LOG_ERROR("日志系统初始化失败");
-        return NULL;
-    }
-    
+
     LOG_INFO("开始创建LinxSDK实例");
     
     LinxSdk* sdk = (LinxSdk*)calloc(1, sizeof(LinxSdk));
