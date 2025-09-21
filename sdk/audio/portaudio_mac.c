@@ -48,6 +48,7 @@ static int portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_
 static int portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size);
 static int portaudio_mac_record(AudioInterface* self);
 static int portaudio_mac_play(AudioInterface* self);
+static bool portaudio_mac_is_play_buffer_empty(AudioInterface* self);
 static int portaudio_mac_destroy(AudioInterface* self);
 
 // VTable for PortAudio Mac implementation
@@ -58,6 +59,7 @@ static const AudioInterfaceVTable portaudio_mac_vtable = {
     .write = portaudio_mac_write,
     .record = portaudio_mac_record,
     .play = portaudio_mac_play,
+    .is_play_buffer_empty = portaudio_mac_is_play_buffer_empty,
     .destroy = portaudio_mac_destroy
 };
 
@@ -469,6 +471,27 @@ static int portaudio_mac_play(AudioInterface* self) {
     self->is_playing = true;
     LOG_INFO("Playback started");
     return 0; // Success
+}
+
+static bool portaudio_mac_is_play_buffer_empty(AudioInterface* self) {
+    if (!self || !self->impl_data) {
+        return true; // 如果接口无效，认为缓冲区为空
+    }
+    
+    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
+    
+    // 如果没有在播放，认为缓冲区为空
+    if (!self->is_playing) {
+        return true;
+    }
+    
+    // 检查播放缓冲区是否有数据
+    pthread_mutex_lock(&data->play_mutex);
+    size_t available_data = (data->play_write_pos - data->play_read_pos + data->play_buffer_size) % data->play_buffer_size;
+    pthread_mutex_unlock(&data->play_mutex);
+    
+    // 如果缓冲区中没有数据，认为为空
+    return (available_data == 0);
 }
 
 static int portaudio_mac_destroy(AudioInterface* self) {

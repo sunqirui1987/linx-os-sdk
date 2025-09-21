@@ -45,6 +45,7 @@ typedef struct {
     bool connected;
     bool recording;
     bool playing;
+    bool tts_data_complete;  // TTS数据传输是否完成
     
     pthread_t audio_thread;
     pthread_t websocket_thread;
@@ -58,6 +59,10 @@ typedef struct {
 } LinxDemo;
 
 static LinxDemo g_demo = {0};
+
+// TTS播放完成检测相关变量
+struct timeval g_last_audio_time = {0, 0};
+bool g_has_audio_data = false;
 
 // 配置参数
 #define DEFAULT_SERVER_URL "ws://xrobo-io.qiniuapi.com/v1/ws/"
@@ -76,6 +81,8 @@ static void* websocket_thread_func(void* arg);
 static void start_recording(void);
 static void stop_recording(void);
 static void play_audio(const uint8_t* data, size_t size);
+static bool is_play_buffer_empty(void);
+static void check_tts_playback_complete(void);
 static void setup_mcp_tools(void);
 static void interactive_mode(void);
 static void print_usage(const char* program_name);
@@ -165,11 +172,13 @@ static void event_handler(const LinxEvent* event, void* user_data) {
         case LINX_EVENT_TTS_STARTED:
             LOG_INFO("🔊 开始TTS播放");
             g_demo.playing = true;
+            g_demo.tts_data_complete = false;
             break;
             
         case LINX_EVENT_TTS_STOPPED:
-            LOG_INFO("🔇 TTS播放完成");
-            g_demo.playing = false;
+            LOG_INFO("🔇 TTS数据传输完成，等待播放缓冲区清空...");
+            g_demo.tts_data_complete = true;
+            // 不立即设置playing=false，让音频缓冲区中的数据播放完毕
             break;
         case LINX_EVENT_STATE_CHANGED:
             LOG_INFO("🔧 状态改变: 老状态 %d 新状态 %d", event->data.state_changed.old_state, event->data.state_changed.new_state);
@@ -248,6 +257,12 @@ static bool init_demo(const char* server_url) {
     // 初始化Opus编解码器
     audio_format_t format = {0};
     audio_format_init(&format, g_demo.sample_rate, g_demo.channels, 16, 20);
+
+
+    if (audio_interface_play(g_demo.audio_interface) != 0) {
+        LOG_ERROR("✗ 启动播放流失败");
+        return false;
+}
     
     g_demo.opus_encoder = opus_codec_create();
     g_demo.opus_decoder = opus_codec_create();
@@ -361,6 +376,12 @@ static void* websocket_thread_func(void* arg) {
         if (g_demo.sdk) {
             linx_sdk_poll_events(g_demo.sdk, 1);
         }
+        
+        // 检查TTS播放是否真正完成
+        if (g_demo.tts_data_complete) {
+            check_tts_playback_complete();
+        }
+        
         usleep(1000); // 1ms
     }
     return NULL;
@@ -429,7 +450,42 @@ static void play_audio(const uint8_t* data, size_t size) {
         int ret = audio_interface_write(g_demo.audio_interface, decoded_buffer, decoded_size);
         if( ret != 0){
             LOG_ERROR("✗ 播放失败");
+        } else {
+            // 更新最后音频播放时间（用于TTS播放完成检测）
+            gettimeofday(&g_last_audio_time, NULL);
+            g_has_audio_data = true;
         }
+    }
+}
+
+/**
+ * 检查播放缓冲区是否为空
+ */
+static bool is_play_buffer_empty(void) {
+    // 使用新的音频接口直接检查播放缓冲区状态
+    if (!g_demo.audio_interface) {
+        return true;
+    }
+    
+    // 直接调用音频接口的缓冲区状态检查函数
+    bool buffer_empty = audio_interface_is_play_buffer_empty(g_demo.audio_interface);
+    
+    // 如果缓冲区为空，重置音频数据标志
+    if (buffer_empty) {
+        g_has_audio_data = false;
+    }
+    
+    return buffer_empty;
+}
+
+/**
+ * 检查TTS播放是否真正完成
+ */
+static void check_tts_playback_complete(void) {
+    if (g_demo.tts_data_complete && g_demo.playing && is_play_buffer_empty()) {
+        LOG_INFO("🔇 TTS播放真正完成");
+        g_demo.playing = false;
+        g_demo.tts_data_complete = false;
     }
 }
 

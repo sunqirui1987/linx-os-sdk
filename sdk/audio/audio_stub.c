@@ -10,6 +10,7 @@ static int audio_stub_read(AudioInterface* self, short* buffer, size_t frame_siz
 static int audio_stub_write(AudioInterface* self, short* buffer, size_t frame_size);
 static int audio_stub_record(AudioInterface* self);
 static int audio_stub_play(AudioInterface* self);
+static bool audio_stub_is_play_buffer_empty(AudioInterface* self);
 static int audio_stub_destroy(AudioInterface* self);
 
 // Stub vtable
@@ -20,6 +21,7 @@ static const AudioInterfaceVTable audio_stub_vtable = {
     .write = audio_stub_write,
     .record = audio_stub_record,
     .play = audio_stub_play,
+    .is_play_buffer_empty = audio_stub_is_play_buffer_empty,
     .destroy = audio_stub_destroy
 };
 
@@ -112,6 +114,16 @@ static int audio_stub_play(AudioInterface* self) {
     data->playing = true;
     self->is_playing = true;
     return 0; // Success
+}
+
+static bool audio_stub_is_play_buffer_empty(AudioInterface* self) {
+    if (!self) return true;
+    
+    AudioStubData* data = (AudioStubData*)self->impl_data;
+    if (!data) return true;
+    
+    // Stub implementation: 如果没有在播放，则认为缓冲区为空
+    return !data->playing;
 }
 
 static int audio_stub_destroy(AudioInterface* self) {

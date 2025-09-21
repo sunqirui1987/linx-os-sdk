@@ -63,6 +63,14 @@ int audio_interface_play(AudioInterface* self) {
     return self->vtable->play(self);
 }
 
+bool audio_interface_is_play_buffer_empty(AudioInterface* self) {
+    if (!self || !self->vtable || !self->vtable->is_play_buffer_empty) {
+        LOG_ERROR("Invalid audio interface or vtable");
+        return true; // 默认返回true，表示缓冲区为空
+    }
+    return self->vtable->is_play_buffer_empty(self);
+}
+
 int audio_interface_destroy(AudioInterface* self) {
     if (!self || !self->vtable || !self->vtable->play) {
         LOG_ERROR("Invalid audio interface or vtable");

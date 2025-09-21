@@ -46,6 +46,7 @@
         "initializer_list": "c",
         "linx_websocket.h": "c",
         "cstdlib": "c",
-        "ctime": "c"
+        "ctime": "c",
+        "stdbool.h": "c"
     }
 }
