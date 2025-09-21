@@ -1,12 +1,12 @@
 #include "audio_interface.h"
 #include "../log/linx_log.h"
 
-void audio_interface_init(AudioInterface* self) {
+int audio_interface_init(AudioInterface* self) {
     if (!self || !self->vtable || !self->vtable->init) {
         LOG_ERROR("Invalid audio interface or vtable");
-        return;
+        return -1;
     }
-    self->vtable->init(self);
+    return self->vtable->init(self);
 }
 
 void audio_interface_set_config(AudioInterface* self, unsigned int sample_rate, 
@@ -30,44 +30,44 @@ void audio_interface_set_config(AudioInterface* self, unsigned int sample_rate,
     }
 }
 
-bool audio_interface_read(AudioInterface* self, short* buffer, size_t frame_size) {
+int audio_interface_read(AudioInterface* self, short* buffer, size_t frame_size) {
     if (!self || !self->vtable || !self->vtable->read) {
         LOG_ERROR("Invalid audio interface or vtable");
-        return false;
+        return -1;
     }
     return self->vtable->read(self, buffer, frame_size);
 }
 
-bool audio_interface_write(AudioInterface* self, short* buffer, size_t frame_size) {
+int audio_interface_write(AudioInterface* self, short* buffer, size_t frame_size) {
     if (!self || !self->vtable || !self->vtable->write) {
         LOG_ERROR("Invalid audio interface or vtable");
-        return false;
+        return -1;
     }
     return self->vtable->write(self, buffer, frame_size);
 }
 
-void audio_interface_record(AudioInterface* self) {
+int audio_interface_record(AudioInterface* self) {
     if (!self || !self->vtable || !self->vtable->record) {
         LOG_ERROR("Invalid audio interface or vtable");
-        return;
+        return -1;
+
     }
-    self->vtable->record(self);
+    return self->vtable->record(self);
 }
 
-void audio_interface_play(AudioInterface* self) {
+int audio_interface_play(AudioInterface* self) {
     if (!self || !self->vtable || !self->vtable->play) {
         LOG_ERROR("Invalid audio interface or vtable");
-        return;
+       return -1;
     }
-    self->vtable->play(self);
+    return self->vtable->play(self);
 }
 
-void audio_interface_destroy(AudioInterface* self) {
-    if (!self) {
-        return;
+int audio_interface_destroy(AudioInterface* self) {
+    if (!self || !self->vtable || !self->vtable->play) {
+        LOG_ERROR("Invalid audio interface or vtable");
+       return -1;
     }
     
-    if (self->vtable && self->vtable->destroy) {
-        self->vtable->destroy(self);
-    }
+    return self->vtable->destroy(self);
 }

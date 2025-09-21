@@ -33,8 +33,8 @@ int test_audio_record_play() {
     }
     
     // Set audio configuration
-    // 44.1kHz, 1024 frame size, 1 channel (mono), 4 periods, 8192 buffer size, 2048 period size
-    audio_interface_set_config(audio, 44100, 1024, 1, 4, 8192, 2048);
+    // 16kHz, 1024 frame size, 1 channel (mono), 4 periods, 8192 buffer size, 2048 period size
+    audio_interface_set_config(audio, 16000, 1024, 1, 4, 8192, 2048);
     
     printf("Audio configuration:\n");
     printf("  Sample Rate: %u Hz\n", audio->sample_rate);
@@ -78,9 +78,9 @@ int test_audio_record_play() {
     int frames_processed = 0;
     while (running) {
         // Read audio data from microphone
-        if (audio_interface_read(audio, audio_buffer, audio->frame_size)) {
+        if (audio_interface_read(audio, audio_buffer, audio->frame_size) == 0) {
             // Write audio data to speakers (echo back)
-            if (audio_interface_write(audio, audio_buffer, audio->frame_size)) {
+            if (audio_interface_write(audio, audio_buffer, audio->frame_size)  == 0) {
                 frames_processed++;
                 if (frames_processed % 100 == 0) {
                     printf("Processed %d frames\n", frames_processed);
@@ -127,8 +127,8 @@ int test_audio_basic() {
     }
     
     // Test configuration
-    audio_interface_set_config(audio, 44100, 512, 1, 2, 4096, 1024);
-    if (audio->sample_rate == 44100 && audio->channels == 1) {
+    audio_interface_set_config(audio, 16000, 512, 1, 2, 4096, 1024);
+    if (audio->sample_rate == 16000 && audio->channels == 1) {
         printf("✓ Audio configuration set correctly\n");
     } else {
         printf("✗ Audio configuration failed\n");
@@ -146,6 +146,16 @@ int test_audio_basic() {
 
 int main(int argc, char* argv[]) {
     printf("=== LINX Audio Test Suite ===\n\n");
+
+     // 初始化日志系统
+    log_config_t log_config = LOG_DEFAULT_CONFIG;
+    log_config.level = LOG_LEVEL_DEBUG;  // 默认INFO级别
+    log_config.enable_timestamp = true;
+    log_config.enable_color = true;
+    if (log_init(&log_config) != 0) {
+        LOG_ERROR("日志系统初始化失败");
+        return 0;
+    }
     
     // Set up signal handler
     signal(SIGINT, signal_handler);

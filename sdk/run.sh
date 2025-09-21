@@ -51,6 +51,7 @@ mkdir -p "${THIRD_DIR}"
 clone_or_update_repo() {
     local repo_url="$1"
     local repo_name="$2"
+    local tag="$3"  # Optional tag parameter
     local repo_dir="${THIRD_DIR}/${repo_name}"
     
     # Check if directory exists
@@ -62,10 +63,24 @@ clone_or_update_repo() {
             print_info "Repository ${repo_name} is a valid git repository, updating..."
             cd "${repo_dir}"
             
-            # Try to update from remote
-            git pull origin main 2>/dev/null || git pull origin master 2>/dev/null || {
-                print_warning "Failed to update ${repo_name} from remote, continuing with existing version"
+            # Fetch latest tags and branches
+            git fetch --tags origin || {
+                print_warning "Failed to fetch from remote for ${repo_name}"
             }
+            
+            # If tag is specified, checkout the tag
+            if [ -n "${tag}" ]; then
+                print_info "Checking out tag ${tag} for ${repo_name}..."
+                git checkout "tags/${tag}" || {
+                    print_error "Failed to checkout tag ${tag} for ${repo_name}"
+                    exit 1
+                }
+            else
+                # Try to update from remote
+                git pull origin main 2>/dev/null || git pull origin master 2>/dev/null || {
+                    print_warning "Failed to update ${repo_name} from remote, continuing with existing version"
+                }
+            fi
         else
             print_warning "Directory ${repo_dir} exists but is not a git repository"
             print_info "Removing existing directory and cloning fresh..."
@@ -81,6 +96,16 @@ clone_or_update_repo() {
                 print_error "Failed to clone ${repo_name}"
                 exit 1
             }
+            
+            # If tag is specified, checkout the tag after cloning
+            if [ -n "${tag}" ]; then
+                cd "${repo_dir}"
+                print_info "Checking out tag ${tag} for ${repo_name}..."
+                git checkout "tags/${tag}" || {
+                    print_error "Failed to checkout tag ${tag} for ${repo_name}"
+                    exit 1
+                }
+            fi
         fi
     else
         print_info "Directory ${repo_dir} does not exist"
@@ -90,6 +115,16 @@ clone_or_update_repo() {
             print_error "Failed to clone ${repo_name}"
             exit 1
         }
+        
+        # If tag is specified, checkout the tag after cloning
+        if [ -n "${tag}" ]; then
+            cd "${repo_dir}"
+            print_info "Checking out tag ${tag} for ${repo_name}..."
+            git checkout "tags/${tag}" || {
+                print_error "Failed to checkout tag ${tag} for ${repo_name}"
+                exit 1
+            }
+        fi
     fi
 }
 
@@ -349,8 +384,8 @@ main() {
     
     # Clone/update repositories
     print_info "=== Step 1: Cloning/Updating Dependencies ==="
-    clone_or_update_repo "https://github.com/cesanta/mongoose.git" "mongoose"
-    clone_or_update_repo "https://github.com/xiph/opus.git" "opus"
+    clone_or_update_repo "https://github.com/cesanta/mongoose.git" "mongoose" "7.19"
+    clone_or_update_repo "https://github.com/xiph/opus.git" "opus" "v1.5.2"
     
     # Build dependencies
     print_info "=== Step 2: Building Dependencies ==="

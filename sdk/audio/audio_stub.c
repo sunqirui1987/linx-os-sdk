@@ -3,14 +3,14 @@
 #include <string.h>
 
 // Forward declarations for vtable functions
-static void audio_stub_init(AudioInterface* self);
+static int audio_stub_init(AudioInterface* self);
 static void audio_stub_set_config(AudioInterface* self, unsigned int sample_rate, int frame_size, 
                                  int channels, int periods, int buffer_size, int period_size);
-static bool audio_stub_read(AudioInterface* self, short* buffer, size_t frame_size);
-static bool audio_stub_write(AudioInterface* self, short* buffer, size_t frame_size);
-static void audio_stub_record(AudioInterface* self);
-static void audio_stub_play(AudioInterface* self);
-static void audio_stub_destroy(AudioInterface* self);
+static int audio_stub_read(AudioInterface* self, short* buffer, size_t frame_size);
+static int audio_stub_write(AudioInterface* self, short* buffer, size_t frame_size);
+static int audio_stub_record(AudioInterface* self);
+static int audio_stub_play(AudioInterface* self);
+static int audio_stub_destroy(AudioInterface* self);
 
 // Stub vtable
 static const AudioInterfaceVTable audio_stub_vtable = {
@@ -46,14 +46,15 @@ AudioInterface* audio_stub_create(void) {
     return interface;
 }
 
-static void audio_stub_init(AudioInterface* self) {
-    if (!self) return;
+static int audio_stub_init(AudioInterface* self) {
+    if (!self) return -1;
     
     AudioStubData* data = (AudioStubData*)self->impl_data;
-    if (!data) return;
+    if (!data) return -1;
     
     data->initialized = true;
     self->is_initialized = true;
+    return 0; // Success
 }
 
 static void audio_stub_set_config(AudioInterface* self, unsigned int sample_rate, int frame_size, 
@@ -69,54 +70,57 @@ static void audio_stub_set_config(AudioInterface* self, unsigned int sample_rate
     self->period_size = period_size;
 }
 
-static bool audio_stub_read(AudioInterface* self, short* buffer, size_t frame_size) {
-    if (!self || !buffer) return false;
+static int audio_stub_read(AudioInterface* self, short* buffer, size_t frame_size) {
+    if (!self || !buffer) return -1;
     
     AudioStubData* data = (AudioStubData*)self->impl_data;
-    if (!data || !data->recording) return false;
+    if (!data || !data->recording) return -1;
     
     // Fill buffer with silence (zeros)
     memset(buffer, 0, frame_size * sizeof(short));
-    return true; // Success (stub implementation - returns silence)
+    return 0; // Success (stub implementation - returns silence)
 }
 
-static bool audio_stub_write(AudioInterface* self, short* buffer, size_t frame_size) {
-    if (!self || !buffer) return false;
+static int audio_stub_write(AudioInterface* self, short* buffer, size_t frame_size) {
+    if (!self || !buffer) return -1;
     
     AudioStubData* data = (AudioStubData*)self->impl_data;
-    if (!data || !data->playing) return false;
+    if (!data || !data->playing) return -1;
     
     // Stub implementation - just discard the data
     (void)frame_size; // Suppress unused parameter warning
-    return true; // Success (stub implementation - discards data)
+    return 0; // Success (stub implementation - discards data)
 }
 
-static void audio_stub_record(AudioInterface* self) {
-    if (!self) return;
+static int audio_stub_record(AudioInterface* self) {
+    if (!self) return -1;
     
     AudioStubData* data = (AudioStubData*)self->impl_data;
-    if (!data) return;
+    if (!data) return -1;
     
     data->recording = true;
     self->is_recording = true;
+    return 0; // Success
 }
 
-static void audio_stub_play(AudioInterface* self) {
-    if (!self) return;
+static int audio_stub_play(AudioInterface* self) {
+    if (!self) return -1;
     
     AudioStubData* data = (AudioStubData*)self->impl_data;
-    if (!data) return;
+    if (!data) return -1;
     
     data->playing = true;
     self->is_playing = true;
+    return 0; // Success
 }
 
-static void audio_stub_destroy(AudioInterface* self) {
-    if (!self) return;
+static int audio_stub_destroy(AudioInterface* self) {
+    if (!self) return -1;
     
     AudioStubData* data = (AudioStubData*)self->impl_data;
     if (data) {
         free(data);
+        self->impl_data = NULL;
     }
-    free(self);
+    return 0; // Success
 }

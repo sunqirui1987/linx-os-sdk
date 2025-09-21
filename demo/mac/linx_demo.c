@@ -83,19 +83,19 @@ static void print_usage(const char* program_name);
 // MCP工具回调函数
 static mcp_return_value_t weather_tool_callback(const struct mcp_property_list* properties) {
     (void)properties; // 避免未使用参数警告
-    printf("🌤️  获取天气信息\n");
+    LOG_INFO("🌤️  获取天气信息");
     return mcp_return_string("{\"temperature\": \"22°C\", \"condition\": \"晴天\"}");
 }
 
 static mcp_return_value_t calculator_tool_callback(const struct mcp_property_list* properties) {
     (void)properties; // 避免未使用参数警告
-    printf("🧮 计算器调用\n");
+    LOG_INFO("🧮 计算器调用");
     return mcp_return_string("{\"result\": \"42\"}");
 }
 
 static mcp_return_value_t file_tool_callback(const struct mcp_property_list* properties) {
     (void)properties; // 避免未使用参数警告
-    printf("📁 文件操作\n");
+    LOG_INFO("📁 文件操作");
     return mcp_return_string("{\"status\": \"success\", \"message\": \"文件操作完成\"}");
 }
 
@@ -103,7 +103,7 @@ static mcp_return_value_t file_tool_callback(const struct mcp_property_list* pro
  * 信号处理函数
  */
 static void signal_handler(int sig) {
-    printf("\n收到信号 %d，正在退出...\n", sig);
+    LOG_INFO("\n收到信号 %d，正在退出...", sig);
     g_demo.running = false;
     
     if (g_demo.recording) {
@@ -123,30 +123,39 @@ static void event_handler(const LinxEvent* event, void* user_data) {
     
     switch (event->type) {
         case LINX_EVENT_WEBSOCKET_CONNECTED:
-            printf("✓ 已连接到服务器\n");
+            LOG_INFO("✓ 已连接到服务器");
             g_demo.connected = true;
             break;
             
         case LINX_EVENT_WEBSOCKET_DISCONNECTED:
-            printf("✗ 与服务器断开连接\n");
+            LOG_WARN("✗ 与服务器断开连接");
             g_demo.connected = false;
+            break;
+        case LINX_EVENT_SESSION_ESTABLISHED:
+            LOG_INFO("✓ 会话已建立");
+            break;
+        case LINX_EVENT_LISTENING_STARTED:
+            LOG_INFO("✓ 会话开始");
+            break;
+        case LINX_EVENT_SESSION_ENDED:
+            LOG_WARN("✗ 会话已结束");
             break;
             
         case LINX_EVENT_ERROR:
-            printf("✗ 错误: %s\n", event->data.error.message);
+            LOG_ERROR("✗ 错误: %s", event->data.error.message);
             break;
             
         case LINX_EVENT_AUDIO_DATA:
-            printf("♪ 收到音频数据: %zu 字节\n", event->data.audio_data.size);
+            LOG_DEBUG("♪ 收到音频数据: %zu 字节", event->data.audio_data.size);
             play_audio(event->data.audio_data.data, event->data.audio_data.size);
             break;
             
         case LINX_EVENT_TEXT_MESSAGE:
-            printf("💬 AI回复: %s\n", event->data.text_message.text);
+            LOG_INFO("💬 AI回复: %s", event->data.text_message.text);
             break;
             
         case LINX_EVENT_MCP_MESSAGE:
-            printf("🔧 MCP工具调用: %s\n", event->data.mcp_message.message);
+            LOG_INFO("🔧 MCP工具调用: %s", event->data.mcp_message.message);
             if (g_demo.mcp_server) {
                 // 处理MCP工具调用
                 mcp_server_parse_message(g_demo.mcp_server, event->data.mcp_message.message);
@@ -154,17 +163,20 @@ static void event_handler(const LinxEvent* event, void* user_data) {
             break;
             
         case LINX_EVENT_TTS_STARTED:
-            printf("🔊 开始TTS播放\n");
+            LOG_INFO("🔊 开始TTS播放");
             g_demo.playing = true;
             break;
             
         case LINX_EVENT_TTS_STOPPED:
-            printf("🔇 TTS播放完成\n");
+            LOG_INFO("🔇 TTS播放完成");
             g_demo.playing = false;
+            break;
+        case LINX_EVENT_STATE_CHANGED:
+            LOG_INFO("🔧 状态改变: 老状态 %d 新状态 %d", event->data.state_changed.old_state, event->data.state_changed.new_state);
             break;
             
         default:
-            printf("? 未知事件类型: %d\n", event->type);
+            LOG_WARN("? 未知事件类型: %d", event->type);
             break;
     }
 }
@@ -184,12 +196,12 @@ static bool init_demo(const char* server_url) {
     
     // 初始化互斥锁和条件变量
     if (pthread_mutex_init(&g_demo.audio_mutex, NULL) != 0) {
-        printf("✗ 音频互斥锁初始化失败\n");
+        LOG_ERROR("✗ 音频互斥锁初始化失败");
         return false;
     }
     
     if (pthread_cond_init(&g_demo.audio_cond, NULL) != 0) {
-        printf("✗ 音频条件变量初始化失败\n");
+        LOG_ERROR("✗ 音频条件变量初始化失败");
         pthread_mutex_destroy(&g_demo.audio_mutex);
         return false;
     }
@@ -210,7 +222,7 @@ static bool init_demo(const char* server_url) {
     
     g_demo.sdk = linx_sdk_create(&config);
     if (!g_demo.sdk) {
-        printf("✗ 创建SDK实例失败\n");
+        LOG_ERROR("✗ 创建SDK实例失败");
         return false;
     }
     
@@ -219,7 +231,7 @@ static bool init_demo(const char* server_url) {
     // 初始化音频接口 - 使用PortAudio Mac实现
     g_demo.audio_interface = portaudio_mac_create();
     if (!g_demo.audio_interface) {
-        printf("✗ 创建音频接口失败\n");
+        LOG_ERROR("✗ 创建音频接口失败");
         return false;
     }
     
@@ -237,21 +249,21 @@ static bool init_demo(const char* server_url) {
     g_demo.opus_decoder = opus_codec_create();
     
     if (!g_demo.opus_encoder || !g_demo.opus_decoder) {
-        printf("✗ Opus编解码器创建失败\n");
+        LOG_ERROR("✗ Opus编解码器创建失败");
         return false;
     }
     
     // 初始化编解码器
     if (audio_codec_init_encoder(g_demo.opus_encoder, &format) != CODEC_SUCCESS ||
         audio_codec_init_decoder(g_demo.opus_decoder, &format) != CODEC_SUCCESS) {
-        printf("✗ 初始化Opus编解码器失败\n");
+        LOG_ERROR("✗ 初始化Opus编解码器失败");
         return false;
     }
     
     // 设置MCP工具
     setup_mcp_tools();
     
-    printf("✓ 演示程序初始化成功\n");
+    LOG_INFO("✓ 演示程序初始化成功");
     return true;
 }
 
@@ -261,7 +273,7 @@ static bool init_demo(const char* server_url) {
 static void setup_mcp_tools(void) {
     g_demo.mcp_server = mcp_server_create("LinxDemo", "1.0.0");
     if (!g_demo.mcp_server) {
-        printf("✗ MCP服务器创建失败\n");
+        LOG_ERROR("✗ MCP服务器创建失败");
         return;
     }
     
@@ -291,7 +303,7 @@ static void setup_mcp_tools(void) {
                               "执行文件操作", 
                               file_props, file_tool_callback);
     
-    printf("✓ MCP工具设置完成\n");
+    LOG_INFO("✓ MCP工具设置完成");
 }
 
 /**
@@ -316,10 +328,10 @@ static void* audio_thread_func(void* arg) {
         pthread_mutex_unlock(&g_demo.audio_mutex);
         
         // 录制音频
-        bool read_success = audio_interface_read(g_demo.audio_interface, 
+        int read_success = audio_interface_read(g_demo.audio_interface, 
                                                audio_buffer, g_demo.frame_size);
         
-        if (read_success && g_demo.connected) {
+        if (read_success == 0 && g_demo.connected) {
             // 编码音频
             size_t encoded_size = 0;
             if (audio_codec_encode(g_demo.opus_encoder, (int16_t*)audio_buffer, 
@@ -355,12 +367,12 @@ static void* websocket_thread_func(void* arg) {
  */
 static void start_recording(void) {
     if (g_demo.recording) {
-        printf("! 已在录音中\n");
+        LOG_WARN("! 已在录音中");
         return;
     }
     
     if (!g_demo.connected) {
-        printf("✗ 未连接到服务器\n");
+        LOG_ERROR("✗ 未连接到服务器");
         return;
     }
     
@@ -369,8 +381,13 @@ static void start_recording(void) {
     pthread_cond_signal(&g_demo.audio_cond);
     pthread_mutex_unlock(&g_demo.audio_mutex);
     
-    audio_interface_record(g_demo.audio_interface);
-    printf("🎤 开始录音...\n");
+    int ret = audio_interface_record(g_demo.audio_interface);
+    if(ret != 0) {
+        LOG_ERROR("✗ 录音失败: ");
+        g_demo.recording = false;
+        return;
+    }
+    LOG_INFO("🎤 开始录音...");
 }
 
 /**
@@ -378,7 +395,7 @@ static void start_recording(void) {
  */
 static void stop_recording(void) {
     if (!g_demo.recording) {
-        printf("! 未在录音\n");
+        LOG_WARN("! 未在录音");
         return;
     }
     
@@ -386,7 +403,7 @@ static void stop_recording(void) {
     g_demo.recording = false;
     pthread_mutex_unlock(&g_demo.audio_mutex);
     
-    printf("🎤 停止录音\n");
+    LOG_INFO("🎤 停止录音");
 }
 
 /**
@@ -403,7 +420,10 @@ static void play_audio(const uint8_t* data, size_t size) {
                          (int16_t*)decoded_buffer, sizeof(decoded_buffer)/sizeof(int16_t), &decoded_size) == CODEC_SUCCESS) {
         
         // 播放解码后的音频
-        audio_interface_write(g_demo.audio_interface, decoded_buffer, decoded_size);
+        int ret = audio_interface_write(g_demo.audio_interface, decoded_buffer, decoded_size);
+        if( ret != 0){
+            LOG_ERROR("✗ 播放失败");
+        }
     }
 }
 
@@ -459,15 +479,8 @@ static void interactive_mode(void) {
             }
         } else if (strcmp(input, "/help") == 0) {
             print_usage("linx_demo");
-        } else if (input[0] != '/') {
-            if (g_demo.connected) {
-                linx_sdk_send_text(g_demo.sdk, input);
-                printf("✓ 文本已发送\n");
-            } else {
-                printf("✗ 未连接到服务器\n");
-            }
         } else {
-            printf("✗ 未知命令: %s\n", input);
+            LOG_WARN("✗ 未知命令: %s", input);
         }
     }
     
@@ -514,7 +527,7 @@ static void cleanup_demo(void) {
     pthread_mutex_destroy(&g_demo.audio_mutex);
     pthread_cond_destroy(&g_demo.audio_cond);
     
-    printf("✓ 资源清理完成\n");
+    LOG_INFO("✓ 资源清理完成");
 }
 
 /**
@@ -558,7 +571,7 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 server_url = argv[++i];
             } else {
-                printf("✗ 缺少服务器地址参数\n");
+                LOG_ERROR("✗ 缺少服务器地址参数");
                 return 1;
             }
         }
@@ -566,15 +579,15 @@ int main(int argc, char* argv[]) {
     
     // 初始化演示程序
     if (!init_demo(server_url)) {
-        printf("✗ 演示程序初始化失败\n");
+        LOG_ERROR("✗ 演示程序初始化失败");
         return 1;
     }
     
     // 连接到服务器
-    printf("正在连接到服务器: %s\n", server_url);
+    LOG_INFO("正在连接到服务器: %s", server_url);
     LinxSdkError result = linx_sdk_connect(g_demo.sdk);
     if (result != LINX_SDK_SUCCESS) {
-        printf("✗ 连接失败: %d\n", result);
+        LOG_ERROR("✗ 连接失败: %d", result);
         cleanup_demo();
         return 1;
     }
@@ -587,7 +600,7 @@ int main(int argc, char* argv[]) {
     }
     
     if (!g_demo.connected) {
-        printf("✗ 连接超时\n");
+        LOG_ERROR("✗ 连接超时");
         cleanup_demo();
         return 1;
     }
@@ -598,6 +611,6 @@ int main(int argc, char* argv[]) {
     // 清理资源
     cleanup_demo();
     
-    printf("程序退出\n");
+    LOG_INFO("程序退出");
     return 0;
 }

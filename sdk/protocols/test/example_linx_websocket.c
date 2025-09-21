@@ -445,6 +445,16 @@ int main() {
     printf("🚀 Linx WebSocket 长连接应用\n");
     printf("============================\n\n");
 
+     // 初始化日志系统
+    log_config_t log_config = LOG_DEFAULT_CONFIG;
+    log_config.level = LOG_LEVEL_DEBUG;  // 默认INFO级别
+    log_config.enable_timestamp = true;
+    log_config.enable_color = true;
+    if (log_init(&log_config) != 0) {
+        LOG_ERROR("日志系统初始化失败");
+        return 1;
+    }
+
     // 1. 设置信号处理
     printf("1️⃣ 设置信号处理...\n");
     signal(SIGINT, signal_handler);

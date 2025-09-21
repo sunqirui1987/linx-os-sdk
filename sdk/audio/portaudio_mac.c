@@ -4,16 +4,51 @@
 #include <string.h>
 #include <unistd.h>
 
-// Forward declarations
-static void portaudio_mac_init(AudioInterface* self);
-static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_rate, 
-                                     int frame_size, int channels, int periods, 
-                                     int buffer_size, int period_size);
-static bool portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_size);
-static bool portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size);
-static void portaudio_mac_record(AudioInterface* self);
-static void portaudio_mac_play(AudioInterface* self);
-static void portaudio_mac_destroy(AudioInterface* self);
+
+
+/**
+ * PortAudio implementation data structure
+ */
+typedef struct {
+    PaStream* input_stream;
+    PaStream* output_stream;
+    PaStreamParameters input_params;
+    PaStreamParameters output_params;
+    
+    // Ring buffers for audio data
+    short* record_buffer;
+    short* play_buffer;
+    size_t record_buffer_size;
+    size_t play_buffer_size;
+    size_t record_read_pos;
+    size_t record_write_pos;
+    size_t play_read_pos;
+    size_t play_write_pos;
+    
+    // Thread synchronization
+    pthread_mutex_t record_mutex;
+    pthread_mutex_t play_mutex;
+    pthread_cond_t record_cond;
+    pthread_cond_t play_cond;
+    
+    // State flags
+    bool record_thread_running;
+    bool play_thread_running;
+    pthread_t record_thread;
+    pthread_t play_thread;
+} PortAudioMacData;
+
+
+// Forward declarations for vtable functions
+static int portaudio_mac_init(AudioInterface* self);
+static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_rate,
+                                    int frame_size, int channels, int periods,
+                                    int buffer_size, int period_size);
+static int portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_size);
+static int portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size);
+static int portaudio_mac_record(AudioInterface* self);
+static int portaudio_mac_play(AudioInterface* self);
+static int portaudio_mac_destroy(AudioInterface* self);
 
 // VTable for PortAudio Mac implementation
 static const AudioInterfaceVTable portaudio_mac_vtable = {
@@ -25,6 +60,22 @@ static const AudioInterfaceVTable portaudio_mac_vtable = {
     .play = portaudio_mac_play,
     .destroy = portaudio_mac_destroy
 };
+
+
+/**
+ * PortAudio callback functions
+ */
+static int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
+                             unsigned long frame_count,
+                             const PaStreamCallbackTimeInfo* time_info,
+                             PaStreamCallbackFlags status_flags,
+                             void* user_data);
+
+static int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
+                           unsigned long frame_count,
+                           const PaStreamCallbackTimeInfo* time_info,
+                           PaStreamCallbackFlags status_flags,
+                           void* user_data);
 
 AudioInterface* portaudio_mac_create(void) {
     AudioInterface* interface = (AudioInterface*)malloc(sizeof(AudioInterface));
@@ -56,20 +107,21 @@ AudioInterface* portaudio_mac_create(void) {
     return interface;
 }
 
-static void portaudio_mac_init(AudioInterface* self) {
+static int portaudio_mac_init(AudioInterface* self) {
     if (!self || !self->impl_data) {
         LOG_ERROR("Invalid audio interface");
-        return;
+        return -1;
     }
     
     PaError err = Pa_Initialize();
     if (err != paNoError) {
         LOG_ERROR("Failed to initialize PortAudio: %s", Pa_GetErrorText(err));
-        return;
+        return -1;
     }
     
     self->is_initialized = true;
     LOG_INFO("PortAudio initialized successfully");
+    return 0; // Success
 }
 
 static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_rate, 
@@ -82,6 +134,14 @@ static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_r
     
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
     
+    // Store configuration in AudioInterface structure
+    self->sample_rate = sample_rate;
+    self->frame_size = frame_size;
+    self->channels = channels;
+    self->periods = periods;
+    self->buffer_size = buffer_size;
+    self->period_size = period_size;
+    
     // Set up input parameters
     data->input_params.device = Pa_GetDefaultInputDevice();
     if (data->input_params.device == paNoDevice) {
@@ -90,6 +150,11 @@ static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_r
     }
     
     const PaDeviceInfo* inputDeviceInfo = Pa_GetDeviceInfo(data->input_params.device);
+    if (!inputDeviceInfo) {
+        LOG_ERROR("Failed to get input device info");
+        return;
+    }
+    
     // Use the minimum of requested channels and device max channels
     int inputChannels = (channels <= inputDeviceInfo->maxInputChannels) ? channels : inputDeviceInfo->maxInputChannels;
     
@@ -109,6 +174,11 @@ static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_r
     }
     
     const PaDeviceInfo* outputDeviceInfo = Pa_GetDeviceInfo(data->output_params.device);
+    if (!outputDeviceInfo) {
+        LOG_ERROR("Failed to get output device info");
+        return;
+    }
+    
     // Use the minimum of requested channels and device max channels
     int outputChannels = (channels <= outputDeviceInfo->maxOutputChannels) ? channels : outputDeviceInfo->maxOutputChannels;
     
@@ -139,7 +209,7 @@ static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_r
                   sample_rate, channels, frame_size);
 }
 
-int portaudio_record_callback(const void* input_buffer, void* output_buffer,
+int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
                              unsigned long frame_count,
                              const PaStreamCallbackTimeInfo* time_info,
                              PaStreamCallbackFlags status_flags,
@@ -155,8 +225,10 @@ int portaudio_record_callback(const void* input_buffer, void* output_buffer,
     pthread_mutex_lock(&data->record_mutex);
     
     size_t samples_to_write = frame_count * interface->channels;
-    size_t available_space = data->record_buffer_size - 
-                            ((data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size);
+    // Calculate used space in the ring buffer
+    size_t used_space = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
+    // Available space is buffer size minus used space minus 1 (to distinguish full from empty)
+    size_t available_space = data->record_buffer_size - used_space - 1;
     
     if (samples_to_write <= available_space) {
         for (size_t i = 0; i < samples_to_write; i++) {
@@ -164,6 +236,9 @@ int portaudio_record_callback(const void* input_buffer, void* output_buffer,
             data->record_write_pos = (data->record_write_pos + 1) % data->record_buffer_size;
         }
         pthread_cond_signal(&data->record_cond);
+    } else {
+        // Buffer overflow - log warning but continue
+        LOG_WARN("Record buffer overflow, dropping %lu samples", samples_to_write);
     }
     
     pthread_mutex_unlock(&data->record_mutex);
@@ -171,7 +246,7 @@ int portaudio_record_callback(const void* input_buffer, void* output_buffer,
     return paContinue;
 }
 
-int portaudio_play_callback(const void* input_buffer, void* output_buffer,
+int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
                            unsigned long frame_count,
                            const PaStreamCallbackTimeInfo* time_info,
                            PaStreamCallbackFlags status_flags,
@@ -187,6 +262,7 @@ int portaudio_play_callback(const void* input_buffer, void* output_buffer,
     pthread_mutex_lock(&data->play_mutex);
     
     size_t samples_to_read = frame_count * interface->channels;
+    // Calculate available data in the ring buffer
     size_t available_data = (data->play_write_pos - data->play_read_pos + data->play_buffer_size) % data->play_buffer_size;
     
     if (samples_to_read <= available_data) {
@@ -197,6 +273,7 @@ int portaudio_play_callback(const void* input_buffer, void* output_buffer,
     } else {
         // Not enough data, output silence
         memset(output, 0, samples_to_read * sizeof(short));
+        LOG_DEBUG("Play buffer underrun, outputting silence for %lu samples", samples_to_read);
     }
     
     pthread_mutex_unlock(&data->play_mutex);
@@ -204,10 +281,10 @@ int portaudio_play_callback(const void* input_buffer, void* output_buffer,
     return paContinue;
 }
 
-static bool portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_size) {
+static int portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_size) {
     if (!self || !self->impl_data || !buffer) {
         LOG_ERROR("Invalid parameters for read");
-        return false;
+        return -1;
     }
     
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
@@ -226,7 +303,7 @@ static bool portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame
         int result = pthread_cond_timedwait(&data->record_cond, &data->record_mutex, &timeout);
         if (result != 0) {
             pthread_mutex_unlock(&data->record_mutex);
-            return false;
+            return -1;
         }
         
         available_data = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
@@ -238,17 +315,17 @@ static bool portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame
             data->record_read_pos = (data->record_read_pos + 1) % data->record_buffer_size;
         }
         pthread_mutex_unlock(&data->record_mutex);
-        return true;
+        return 0; // Success
     }
     
     pthread_mutex_unlock(&data->record_mutex);
-    return false;
+    return -1;
 }
 
-static bool portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size) {
+static int portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size) {
     if (!self || !self->impl_data || !buffer) {
         LOG_ERROR("Invalid parameters for write");
-        return false;
+        return -1;
     }
     
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
@@ -265,25 +342,47 @@ static bool portaudio_mac_write(AudioInterface* self, short* buffer, size_t fram
             data->play_write_pos = (data->play_write_pos + 1) % data->play_buffer_size;
         }
         pthread_mutex_unlock(&data->play_mutex);
-        return true;
+        return 0; // Success
     }
     
     pthread_mutex_unlock(&data->play_mutex);
-    return false;
+    return -1;
 }
 
-static void portaudio_mac_record(AudioInterface* self) {
+static int portaudio_mac_record(AudioInterface* self) {
     if (!self || !self->impl_data) {
         LOG_ERROR("Invalid audio interface");
-        return;
+        return -1;
     }
     
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
     
     if (self->is_recording) {
         LOG_WARN("Already recording");
-        return;
+        return 0; // Already recording is not an error
     }
+    
+    // Validate that configuration has been set
+    if (self->sample_rate == 0 || self->frame_size == 0 || self->channels == 0) {
+        LOG_ERROR("Audio configuration not set. Call set_config first.");
+        return -1;
+    }
+    
+    // Validate input device
+    if (data->input_params.device == paNoDevice) {
+        LOG_ERROR("No input device configured");
+        return -1;
+    }
+    
+    // Check if device is still valid
+    const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(data->input_params.device);
+    if (!deviceInfo) {
+        LOG_ERROR("Input device is no longer available");
+        return -1;
+    }
+    
+    LOG_INFO("Opening input stream: device=%s, rate=%u, channels=%d, frame_size=%d", 
+             deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
     
     PaError err = Pa_OpenStream(&data->input_stream,
                                &data->input_params,
@@ -291,37 +390,60 @@ static void portaudio_mac_record(AudioInterface* self) {
                                self->sample_rate,
                                self->frame_size,
                                paClipOff,
-                               portaudio_record_callback,
+                               _portaudio_record_callback,
                                self);
     
     if (err != paNoError) {
         LOG_ERROR("Failed to open input stream: %s", Pa_GetErrorText(err));
-        return;
+        return -1;
     }
     
     err = Pa_StartStream(data->input_stream);
     if (err != paNoError) {
         LOG_ERROR("Failed to start input stream: %s", Pa_GetErrorText(err));
         Pa_CloseStream(data->input_stream);
-        return;
+        return -1;
     }
     
     self->is_recording = true;
     LOG_INFO("Recording started");
+    return 0; // Success
 }
 
-static void portaudio_mac_play(AudioInterface* self) {
+static int portaudio_mac_play(AudioInterface* self) {
     if (!self || !self->impl_data) {
         LOG_ERROR("Invalid audio interface");
-        return;
+        return -1;
     }
     
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
     
     if (self->is_playing) {
         LOG_WARN("Already playing");
-        return;
+        return 0; // Already playing is not an error
     }
+    
+    // Validate that configuration has been set
+    if (self->sample_rate == 0 || self->frame_size == 0 || self->channels == 0) {
+        LOG_ERROR("Audio configuration not set. Call set_config first.");
+        return -1;
+    }
+    
+    // Validate output device
+    if (data->output_params.device == paNoDevice) {
+        LOG_ERROR("No output device configured");
+        return -1;
+    }
+    
+    // Check if device is still valid
+    const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(data->output_params.device);
+    if (!deviceInfo) {
+        LOG_ERROR("Output device is no longer available");
+        return -1;
+    }
+    
+    LOG_INFO("Opening output stream: device=%s, rate=%u, channels=%d, frame_size=%d", 
+             deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
     
     PaError err = Pa_OpenStream(&data->output_stream,
                                NULL, // no input
@@ -329,28 +451,29 @@ static void portaudio_mac_play(AudioInterface* self) {
                                self->sample_rate,
                                self->frame_size,
                                paClipOff,
-                               portaudio_play_callback,
+                               _portaudio_play_callback,
                                self);
     
     if (err != paNoError) {
         LOG_ERROR("Failed to open output stream: %s", Pa_GetErrorText(err));
-        return;
+        return -1;
     }
     
     err = Pa_StartStream(data->output_stream);
     if (err != paNoError) {
         LOG_ERROR("Failed to start output stream: %s", Pa_GetErrorText(err));
         Pa_CloseStream(data->output_stream);
-        return;
+        return -1;
     }
     
     self->is_playing = true;
     LOG_INFO("Playback started");
+    return 0; // Success
 }
 
-static void portaudio_mac_destroy(AudioInterface* self) {
+static int portaudio_mac_destroy(AudioInterface* self) {
     if (!self || !self->impl_data) {
-        return;
+        return -1;
     }
     
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
@@ -382,12 +505,12 @@ static void portaudio_mac_destroy(AudioInterface* self) {
     pthread_cond_destroy(&data->play_cond);
     
     free(data);
+    self->impl_data = NULL;
     
     if (self->is_initialized) {
         Pa_Terminate();
     }
     
-    free(self);
-    
     LOG_INFO("PortAudio Mac implementation destroyed");
+    return 0; // Success
 }

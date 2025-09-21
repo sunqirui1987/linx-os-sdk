@@ -17,14 +17,14 @@ typedef struct AudioInterface AudioInterface;
  * Audio interface function pointers
  */
 typedef struct {
-    void (*init)(AudioInterface* self);
+    int (*init)(AudioInterface* self);
     void (*set_config)(AudioInterface* self, unsigned int sample_rate, int frame_size, 
                       int channels, int periods, int buffer_size, int period_size);
-    bool (*read)(AudioInterface* self, short* buffer, size_t frame_size);
-    bool (*write)(AudioInterface* self, short* buffer, size_t frame_size);
-    void (*record)(AudioInterface* self);
-    void (*play)(AudioInterface* self);
-    void (*destroy)(AudioInterface* self);
+    int (*read)(AudioInterface* self, short* buffer, size_t frame_size);
+    int (*write)(AudioInterface* self, short* buffer, size_t frame_size);
+    int (*record)(AudioInterface* self);
+    int (*play)(AudioInterface* self);
+    int (*destroy)(AudioInterface* self);
 } AudioInterfaceVTable;
 
 /**
@@ -51,7 +51,7 @@ struct AudioInterface {
 /**
  * Initialize audio interface
  */
-void audio_interface_init(AudioInterface* self);
+int audio_interface_init(AudioInterface* self);
 
 /**
  * Set audio configuration
@@ -63,27 +63,27 @@ void audio_interface_set_config(AudioInterface* self, unsigned int sample_rate,
 /**
  * Read audio data
  */
-bool audio_interface_read(AudioInterface* self, short* buffer, size_t frame_size);
+int audio_interface_read(AudioInterface* self, short* buffer, size_t frame_size);
 
 /**
  * Write audio data
  */
-bool audio_interface_write(AudioInterface* self, short* buffer, size_t frame_size);
+int audio_interface_write(AudioInterface* self, short* buffer, size_t frame_size);
 
 /**
  * Start recording
  */
-void audio_interface_record(AudioInterface* self);
+int audio_interface_record(AudioInterface* self);
 
 /**
  * Start playing
  */
-void audio_interface_play(AudioInterface* self);
+int audio_interface_play(AudioInterface* self);
 
 /**
  * Destroy audio interface
  */
-void audio_interface_destroy(AudioInterface* self);
+int audio_interface_destroy(AudioInterface* self);
 
 #ifdef __cplusplus
 }

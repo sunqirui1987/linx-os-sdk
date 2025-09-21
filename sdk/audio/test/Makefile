@@ -13,7 +13,7 @@ BUILD_DIR = build
 
 # Source files
 AUDIO_SOURCES = ../audio_interface.c ../portaudio_mac.c ../../log/linx_log.c
-TEST_SOURCES = audio_test.c
+TEST_SOURCES = audio_test_portaudio.c
 
 # Object files (in build directory)
 AUDIO_OBJECTS = $(addprefix $(BUILD_DIR)/, $(notdir $(AUDIO_SOURCES:.c=.o)))
@@ -43,7 +43,7 @@ $(BUILD_DIR)/linx_log.o: ../../log/linx_log.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Compile test sources
-$(BUILD_DIR)/audio_test.o: audio_test.c
+$(BUILD_DIR)/audio_test_portaudio.o: audio_test_portaudio.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 test: $(TARGET)

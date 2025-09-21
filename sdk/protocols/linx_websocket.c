@@ -339,6 +339,7 @@ static void linx_websocket_event_handler(struct mg_connection* conn, int ev, voi
             if (wm->flags & WEBSOCKET_OP_TEXT) {
                 /* Text message - parse as JSON */
                 LOG_DEBUG("WebSocket received text message (length: %zu)", wm->data.len);
+                LOG_DEBUG("WebSocket message content: %.*s", (int)wm->data.len, (const char*)wm->data.buf);
                 
                 cJSON* json = cJSON_ParseWithLength((const char*)wm->data.buf, wm->data.len);
                 if (!json) {
