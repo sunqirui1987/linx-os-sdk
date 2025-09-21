@@ -26,8 +26,13 @@ struct linx_websocket_protocol {
     char* auth_token;               // 认证令牌
     char* device_id;                // 设备ID
     char* client_id;                // 客户端ID
-    int server_sample_rate;         // 服务器采样率
-    int server_frame_duration;      // 服务器帧持续时间
+
+    /* 协议状态 */
+    char* client_audio_format;       // 客户端音频格式
+    int audio_sample_rate;           // 客户端采样率
+    int audio_channels;              // 客户端声道数
+    int audio_frame_duration;        // 客户端帧持续时间
+    int protocol_version;           // 协议版本
 };
 
 /* Internal helper function declarations */
@@ -151,6 +156,11 @@ linx_websocket_protocol_t* linx_websocket_protocol_create(const linx_websocket_c
         LOG_DEBUG("Setting WebSocket protocol version: %d", config->protocol_version);
         ws_protocol->version = config->protocol_version;
     }
+
+    ws_protocol->client_audio_format = config->client_audio_format;
+    ws_protocol->audio_sample_rate = config->audio_sample_rate;
+    ws_protocol->audio_channels = config->audio_channels;
+    ws_protocol->audio_frame_duration = config->audio_frame_duration;
     
     LOG_INFO("WebSocket protocol created successfully - version: %d, URL: %s", 
              ws_protocol->version, ws_protocol->server_url ? ws_protocol->server_url : "N/A");
@@ -401,8 +411,8 @@ static void linx_websocket_event_handler(struct mg_connection* conn, int ev, voi
                             if (type == 0 && payload_size > 0) { /* Audio data */
                                 linx_audio_stream_packet_t* packet = linx_audio_stream_packet_create(payload_size);
                                 if (packet) {
-                                    packet->sample_rate = ws_protocol->base.server_sample_rate;
-                                    packet->frame_duration = ws_protocol->base.server_frame_duration;
+                                    packet->sample_rate = ws_protocol->audio_sample_rate;
+                                    packet->frame_duration = ws_protocol->audio_frame_duration;
                                     packet->timestamp = timestamp;
                                     memcpy(packet->payload, bp2->payload, payload_size);
                                     
@@ -421,8 +431,8 @@ static void linx_websocket_event_handler(struct mg_connection* conn, int ev, voi
                             if (type == 0 && payload_size > 0) { /* Audio data */
                                 linx_audio_stream_packet_t* packet = linx_audio_stream_packet_create(payload_size);
                                 if (packet) {
-                                    packet->sample_rate = ws_protocol->base.server_sample_rate;
-                                    packet->frame_duration = ws_protocol->base.server_frame_duration;
+                                    packet->sample_rate = ws_protocol->audio_sample_rate;
+                                    packet->frame_duration = ws_protocol->audio_frame_duration;
                                     packet->timestamp = 0; /* v3 protocol doesn't include timestamp */
                                     memcpy(packet->payload, bp3->payload, payload_size);
                                     
@@ -436,8 +446,8 @@ static void linx_websocket_event_handler(struct mg_connection* conn, int ev, voi
                         /* Fallback for unsupported protocol versions - treat as raw audio data */
                         linx_audio_stream_packet_t* packet = linx_audio_stream_packet_create(wm->data.len);
                         if (packet) {
-                            packet->sample_rate = ws_protocol->base.server_sample_rate;
-                            packet->frame_duration = ws_protocol->base.server_frame_duration;
+                            packet->sample_rate = ws_protocol->audio_sample_rate;
+                            packet->frame_duration = ws_protocol->audio_frame_duration;
                             packet->timestamp = 0;
                             memcpy(packet->payload, wm->data.buf, wm->data.len);
                             
@@ -718,12 +728,12 @@ static bool linx_websocket_parse_server_hello(linx_websocket_protocol_t* ws_prot
     if (cJSON_IsObject(audio_params)) {
         int sample_rate = extract_json_int_value(audio_params, "sample_rate");
         if (sample_rate > 0) {
-            ws_protocol->server_sample_rate = sample_rate;
+            ws_protocol->audio_sample_rate = sample_rate;
         }
         
         int frame_duration = extract_json_int_value(audio_params, "frame_duration");
         if (frame_duration > 0) {
-            ws_protocol->server_frame_duration = frame_duration;
+            ws_protocol->audio_frame_duration = frame_duration;
         }
     }
     
@@ -752,10 +762,10 @@ static char* linx_websocket_get_hello_message(linx_websocket_protocol_t* ws_prot
     
     /* Add audio_params object */
     cJSON* audio_params = cJSON_CreateObject();
-    cJSON_AddStringToObject(audio_params, "format", LINX_WEBSOCKET_AUDIO_FORMAT);
-    cJSON_AddNumberToObject(audio_params, "sample_rate", LINX_WEBSOCKET_AUDIO_SAMPLE_RATE);
-    cJSON_AddNumberToObject(audio_params, "channels", LINX_WEBSOCKET_AUDIO_CHANNELS);
-    cJSON_AddNumberToObject(audio_params, "frame_duration", LINX_WEBSOCKET_AUDIO_FRAME_DURATION);
+    cJSON_AddStringToObject(audio_params, "format", ws_protocol->client_audio_format);
+    cJSON_AddNumberToObject(audio_params, "sample_rate", ws_protocol->audio_sample_rate);
+    cJSON_AddNumberToObject(audio_params, "channels", ws_protocol->audio_channels);
+    cJSON_AddNumberToObject(audio_params, "frame_duration", ws_protocol->audio_frame_duration);
     cJSON_AddItemToObject(root, "audio_params", audio_params);
     
     char* json_string = cJSON_PrintUnformatted(root);

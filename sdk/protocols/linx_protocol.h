@@ -84,9 +84,8 @@ struct linx_protocol {
     const linx_protocol_vtable_t* vtable;   // 虚函数表指针
     linx_protocol_callbacks_t callbacks;    // 回调函数配置
     
-    /* 协议状态 */
-    int server_sample_rate;         // 服务器采样率
-    int server_frame_duration;      // 服务器帧持续时间
+
+
     bool error_occurred;            // 是否发生错误
     char* session_id;               // 会话ID
     uint64_t last_incoming_time;    // 最后接收数据的时间戳（毫秒）
@@ -99,10 +98,6 @@ void linx_protocol_destroy(linx_protocol_t* protocol);
 /* 回调函数配置 */
 void linx_protocol_set_callbacks(linx_protocol_t* protocol, const linx_protocol_callbacks_t* callbacks);
 
-/* 获取器函数 */
-int linx_protocol_get_server_sample_rate(const linx_protocol_t* protocol);
-int linx_protocol_get_server_frame_duration(const linx_protocol_t* protocol);
-const char* linx_protocol_get_session_id(const linx_protocol_t* protocol);
 
 /* 协议操作函数 */
 bool linx_protocol_start(linx_protocol_t* protocol);

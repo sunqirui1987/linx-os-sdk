@@ -8,11 +8,6 @@
 extern "C" {
 #endif
 
-/* 音频参数配置常量 */
-#define LINX_WEBSOCKET_AUDIO_FORMAT         "opus"
-#define LINX_WEBSOCKET_AUDIO_SAMPLE_RATE    16000
-#define LINX_WEBSOCKET_AUDIO_CHANNELS       1
-#define LINX_WEBSOCKET_AUDIO_FRAME_DURATION 60
 
 /* WebSocket 协议实现结构体 - 前向声明（隐藏实现细节） */
 typedef struct linx_websocket_protocol linx_websocket_protocol_t;
@@ -26,7 +21,15 @@ typedef struct {
     const char* auth_token;         // 认证令牌
     const char* device_id;          // 设备ID
     const char* client_id;          // 客户端ID
+    
+
+     /* 协议状态 */
+    char* client_audio_format;       // 客户端音频格式
+    int audio_sample_rate;           // 客户端采样率
+    int audio_channels;              // 客户端声道数
+    int audio_frame_duration;        // 客户端帧持续时间
     int protocol_version;           // 协议版本
+
 } linx_websocket_config_t;
 
 /* 核心接口函数 */

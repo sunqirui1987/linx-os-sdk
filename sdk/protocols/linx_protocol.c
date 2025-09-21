@@ -15,7 +15,9 @@ static uint64_t get_current_time_ms(void) {
 }
 
 /* 协议管理函数 */
-void linx_protocol_init(linx_protocol_t* protocol, const linx_protocol_vtable_t* vtable) {
+void linx_protocol_init(linx_protocol_t* protocol,
+    
+    const linx_protocol_vtable_t* vtable) {
     LOG_DEBUG("Initializing protocol with vtable: %p", vtable);
     
     if (!protocol || !vtable) {
@@ -25,14 +27,11 @@ void linx_protocol_init(linx_protocol_t* protocol, const linx_protocol_vtable_t*
     
     memset(protocol, 0, sizeof(linx_protocol_t));
     protocol->vtable = vtable;
-    protocol->server_sample_rate = 24000;      // 默认采样率24kHz
-    protocol->server_frame_duration = 60;      // 默认帧持续时间60ms
     protocol->error_occurred = false;
     protocol->session_id = NULL;
     protocol->last_incoming_time = get_current_time_ms();
     
-    LOG_INFO("Protocol initialized successfully - sample_rate: %d, frame_duration: %d", 
-             protocol->server_sample_rate, protocol->server_frame_duration);
+    LOG_INFO("Protocol initialized successfully ");
 }
 
 void linx_protocol_destroy(linx_protocol_t* protocol) {
@@ -57,14 +56,6 @@ void linx_protocol_destroy(linx_protocol_t* protocol) {
     LOG_INFO("Protocol destroyed successfully");
 }
 
-/* 获取器函数 */
-int linx_protocol_get_server_sample_rate(const linx_protocol_t* protocol) {
-    return protocol ? protocol->server_sample_rate : 0;
-}
-
-int linx_protocol_get_server_frame_duration(const linx_protocol_t* protocol) {
-    return protocol ? protocol->server_frame_duration : 0;
-}
 
 const char* linx_protocol_get_session_id(const linx_protocol_t* protocol) {
     return protocol ? protocol->session_id : NULL;

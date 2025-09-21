@@ -43,6 +43,9 @@
         "streambuf": "cpp",
         "unordered_map": "cpp",
         "cstddef": "cpp",
-        "initializer_list": "c"
+        "initializer_list": "c",
+        "linx_websocket.h": "c",
+        "cstdlib": "c",
+        "ctime": "c"
     }
 }

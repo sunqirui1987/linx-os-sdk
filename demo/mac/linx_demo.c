@@ -416,12 +416,14 @@ static void stop_recording(void) {
 static void play_audio(const uint8_t* data, size_t size) {
     if (!data || size == 0) return;
     
-    short decoded_buffer[AUDIO_BUFFER_SIZE];
+    // 使用足够大的缓冲区来处理最大的 Opus 解码帧
+    // 120ms @ 48kHz * 2 channels = 11520 samples，为了兼容性使用更大的缓冲区
+    short decoded_buffer[12000];  // 足够处理任何 Opus 解码帧
     size_t decoded_size = 0;
     
     // 解码音频
     if (audio_codec_decode(g_demo.opus_decoder, data, size,
-                         (int16_t*)decoded_buffer, sizeof(decoded_buffer)/sizeof(int16_t), &decoded_size) == CODEC_SUCCESS) {
+                         (int16_t*)decoded_buffer, sizeof(decoded_buffer)/sizeof(short), &decoded_size) == CODEC_SUCCESS) {
         
         // 播放解码后的音频
         int ret = audio_interface_write(g_demo.audio_interface, decoded_buffer, decoded_size);

@@ -202,11 +202,13 @@ static codec_error_t opus_codec_decode_impl(audio_codec_t* codec, const uint8_t*
 
     opus_codec_impl_t* impl = (opus_codec_impl_t*)codec->impl_data;
     
-    // 计算最大帧大小
-    int max_frame_size = codec->format.sample_rate * codec->format.frame_size_ms / 1000;
+    // 计算最大帧大小 - Opus 支持最大 120ms 的帧
+    // 为了安全起见，我们使用 120ms 作为最大帧大小
+    int max_frame_size = codec->format.sample_rate * 120 / 1000;  // 120ms 最大帧
     
     if (output_size < (size_t)(max_frame_size * codec->format.channels)) {
-        LOG_ERROR("Output buffer too small for Opus decoding");
+        LOG_ERROR("Output buffer too small for Opus decoding: need %d samples, got %zu", 
+                  max_frame_size * codec->format.channels, output_size);
         return CODEC_BUFFER_TOO_SMALL;
     }
 
@@ -259,14 +261,16 @@ static int opus_get_input_frame_size(const audio_codec_t* codec) {
     return codec->format.sample_rate * codec->format.frame_size_ms / 1000;
 }
 
-// 获取最大输出缓冲区大小（字节数）
+// 获取最大输出缓冲区大小（样本数，用于解码）
 static int opus_get_max_output_size(const audio_codec_t* codec) {
     if (!codec) {
         return -1;
     }
     
-    // Opus最大包大小约为4000字节
-    return 4000;
+    // 对于解码，返回最大帧大小（样本数）
+    // Opus 支持最大 120ms 的帧
+    int max_frame_size = codec->format.sample_rate * 120 / 1000;
+    return max_frame_size * codec->format.channels;
 }
 
 // 销毁编解码器
