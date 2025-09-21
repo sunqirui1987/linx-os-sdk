@@ -30,6 +30,18 @@
         "typeinfo": "cpp",
         "utility": "cpp",
         "variant": "cpp",
-        "complex": "cpp"
+        "complex": "cpp",
+        "bitset": "cpp",
+        "iterator": "cpp",
+        "__bit_reference": "c",
+        "__node_handle": "c",
+        "limits": "c",
+        "ratio": "c",
+        "cwchar": "cpp",
+        "type_traits": "cpp",
+        "istream": "cpp",
+        "streambuf": "cpp",
+        "unordered_map": "cpp",
+        "cstddef": "cpp"
     }
 }

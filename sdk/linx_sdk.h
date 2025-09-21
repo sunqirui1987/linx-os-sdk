@@ -84,6 +84,12 @@ typedef enum {
     LINX_EVENT_TEXT_MESSAGE,        ///< 文本消息
     LINX_EVENT_AUDIO_DATA,          ///< 音频数据
     LINX_EVENT_ERROR,               ///< 错误事件
+
+    LINX_EVENT_SENTENCE_START,      ///< 句子开始
+    LINX_EVENT_SENTENCE_END,        ///< 句子结束
+    LINX_EVENT_EMOTION_MESSAGE, ///< 情感事件 [表情]
+    LINX_EVENT_SYSTEM_MESSAGE,  ///< 系统事件 [系统]
+    LINX_EVENT_CUSTOM_MESSAGE,  ///< 自定义事件 [自定义]
     
     // WebSocket相关事件
     LINX_EVENT_WEBSOCKET_CONNECTED, ///< WebSocket连接成功
@@ -116,6 +122,14 @@ typedef struct {
             char* text;
             char* role;  // "user", "assistant"
         } text_message;
+
+        struct {
+            char* value;
+        }custom_message;// 自定义事件
+
+        struct {
+            char* value;  
+        } emotion;
         
         struct {
             uint8_t* data;
@@ -127,35 +141,9 @@ typedef struct {
             int code;
         } error;
         
-        // WebSocket相关事件数据
         struct {
             char* session_id;
         } session_established;
-        
-        struct {
-            char* reason;
-        } session_ended;
-        
-        struct {
-            linx_listening_mode_t mode;
-        } listening_started;
-        
-        struct {
-            char* state;  // "start", "stop", "idle"
-        } tts_event;
-        
-        // MCP相关事件数据
-        struct {
-            char* tool_name;
-            char* parameters;
-            int call_id;
-        } mcp_tool_call;
-        
-        struct {
-            char* result;
-            int call_id;
-            bool success;
-        } mcp_tool_result;
         
         struct {
             char* message;
@@ -164,7 +152,7 @@ typedef struct {
         
         struct {
             char* message;
-        } mcp_message_sent;
+        } system_message;
     } data;
 } LinxEvent;
 

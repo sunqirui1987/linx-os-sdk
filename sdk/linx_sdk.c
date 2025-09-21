@@ -676,22 +676,178 @@ static void _linx_sdk_on_websocket_message(const cJSON* root, void* user_data) {
                 if (sdk->event_callback) {
                     sdk->event_callback(&event, sdk->user_data);
                 }
+            } else if (strcmp(state->valuestring, "sentence_start") == 0) {
+                // TTS句子开始，处理文本内容
+                const cJSON* text = cJSON_GetObjectItem(root, "text");
+                if (text && cJSON_IsString(text)) {
+                    LOG_INFO("TTS句子开始: %s", text->valuestring);
+                    
+                    // 触发文本消息事件
+                    LinxEvent event = {
+                        .type = LINX_EVENT_SENTENCE_START,
+                        .timestamp = time(NULL),
+                        .data.text_message = {
+                            .text = text->valuestring,
+                            .role = "assistant"
+                        }
+                    };
+                    
+                    if (sdk->event_callback) {
+                        sdk->event_callback(&event, sdk->user_data);
+                    }
+                }
             }
         }
     }
-    // 处理goodbye消息
-    else if (strcmp(type->valuestring, "goodbye") == 0) {
-        LOG_INFO("会话结束");
-        _linx_sdk_set_session_id(sdk, NULL);
+    // 处理STT消息
+    else if (strcmp(type->valuestring, "stt") == 0) {
+        const cJSON* text = cJSON_GetObjectItem(root, "text");
+        if (text && cJSON_IsString(text)) {
+            LOG_INFO("STT识别结果: %s", text->valuestring);
+            
+            // 触发文本消息事件
+            LinxEvent event = {
+                .type = LINX_EVENT_TEXT_MESSAGE,
+                .timestamp = time(NULL),
+                .data.text_message = {
+                    .text = text->valuestring,
+                    .role = "assistant"
+                }
+            };
+            
+            if (sdk->event_callback) {
+                sdk->event_callback(&event, sdk->user_data);
+            }
+        }
+    }
+    // 处理LLM消息
+    else if (strcmp(type->valuestring, "llm") == 0) {
+        const cJSON* emotion = cJSON_GetObjectItem(root, "emotion");
+        if (emotion && cJSON_IsString(emotion)) {
+            LOG_INFO("LLM情感状态: %s", emotion->valuestring);
+            // 触发情感状态事件
+            LinxEvent event = {
+                .type = LINX_EVENT_EMOTION_MESSAGE,
+                .timestamp = time(NULL),
+                .data.emotion = {
+                    .value = emotion->valuestring
+                }
+            };
+            
+            if (sdk->event_callback) {
+                sdk->event_callback(&event, sdk->user_data);
+            }
+        }
         
-        // 触发会话结束事件
-        LinxEvent event = {
-            .type = LINX_EVENT_SESSION_ENDED,
-            .timestamp = time(NULL)
-        };
+    }
+    // 处理MCP消息
+    else if (strcmp(type->valuestring, "mcp") == 0) {
+        const cJSON* payload = cJSON_GetObjectItem(root, "payload");
+        if (payload && cJSON_IsObject(payload)) {
+            char* payload_str = cJSON_Print(payload);
+            if (payload_str) {
+                LOG_INFO("收到MCP消息: %s", payload_str);
+
+
+                 // 如果启用了MCP，将消息传递给MCP服务器处理
+                if (sdk->mcp_server) {
+                    mcp_server_parse_message(sdk->mcp_server, payload_str);
+                } 
+                
+                // 触发MCP消息事件
+                LinxEvent event = {
+                    .type = LINX_EVENT_MCP_MESSAGE,
+                    .timestamp = time(NULL),
+                    .data.mcp_message = {
+                        .message = payload_str,
+                        .type = "mcp"
+                    }
+                };
+                
+                if (sdk->event_callback) {
+                    sdk->event_callback(&event, sdk->user_data);
+                }
+                
+                free(payload_str);
+            }
+        }
+    }
+    // 处理系统命令消息
+    else if (strcmp(type->valuestring, "system") == 0) {
+        const cJSON* command = cJSON_GetObjectItem(root, "command");
+        if (command && cJSON_IsString(command)) {
+            LOG_INFO("系统命令: %s", command->valuestring);
+            
+            // 触发MCP消息事件
+            LinxEvent event = {
+                .type = LINX_EVENT_SYSTEM_MESSAGE,
+                .timestamp = time(NULL),
+                .data.system_message = {
+                    .message = command->valuestring
+                }
+            };
+            
+            if (sdk->event_callback) {
+                sdk->event_callback(&event, sdk->user_data);
+            }
+                
+        }
+    }
+    // 处理警告消息
+    else if (strcmp(type->valuestring, "alert") == 0) {
+        const cJSON* status = cJSON_GetObjectItem(root, "status");
+        const cJSON* message = cJSON_GetObjectItem(root, "message");
+        const cJSON* emotion = cJSON_GetObjectItem(root, "emotion");
         
-        if (sdk->event_callback) {
-            sdk->event_callback(&event, sdk->user_data);
+        if (status && cJSON_IsString(status) && 
+            message && cJSON_IsString(message) && 
+            emotion && cJSON_IsString(emotion)) {
+            
+            LOG_WARN("警告消息 - 状态: %s, 消息: %s, 情感: %s", 
+                     status->valuestring, message->valuestring, emotion->valuestring);
+            
+            // 触发错误事件（警告作为特殊的错误事件处理）
+            LinxEvent event = {
+                .type = LINX_EVENT_ERROR,
+                .timestamp = time(NULL),
+                .data.error = {
+                    .message = message->valuestring,
+                    .code = 0  // 警告级别错误代码
+                }
+            };
+            
+            if (sdk->event_callback) {
+                sdk->event_callback(&event, sdk->user_data);
+            }
+        } else {
+            LOG_WARN("警告消息格式不完整，需要status、message和emotion字段");
+        }
+    }
+    // 处理自定义消息
+    else if (strcmp(type->valuestring, "custom") == 0) {
+        const cJSON* payload = cJSON_GetObjectItem(root, "payload");
+        if (payload && cJSON_IsObject(payload)) {
+            char* payload_str = cJSON_Print(payload);
+            if (payload_str) {
+                LOG_INFO("收到自定义消息: %s", payload_str);
+                
+                // 触发文本消息事件（自定义消息作为系统消息处理）
+                LinxEvent event = {
+                    .type = LINX_EVENT_CUSTOM_MESSAGE,
+                    .timestamp = time(NULL),
+                    .data.custom_message = {
+                        .value = payload_str
+                    }
+                };
+                
+                if (sdk->event_callback) {
+                    sdk->event_callback(&event, sdk->user_data);
+                }
+                
+                free(payload_str);
+            }
+        } else {
+            LOG_WARN("自定义消息格式无效：缺少payload字段");
         }
     }
     // 处理其他消息类型
@@ -699,10 +855,7 @@ static void _linx_sdk_on_websocket_message(const cJSON* root, void* user_data) {
         LOG_WARN("未知消息类型: %s", type->valuestring);
     }
     
-    // 如果启用了MCP，将消息传递给MCP服务器处理
-    if (sdk->mcp_enabled && sdk->mcp_server) {
-        mcp_server_parse_message(sdk->mcp_server, json_string);
-    }
+   
     
     free(json_string);
 }
