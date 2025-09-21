@@ -164,7 +164,7 @@ LinX OS SDK 提供了完整的跨平台编译工具链支持，通过 CMake 工�
 | **ESP32** | xtensa | esp-idf | `esp32.cmake` | ESP32 物联网平台 |
 | **全志芯片** | aarch64 | aarch64-linux-gnu | `allwinner-aarch64.cmake` | 全志 ARM64 芯片 |
 | **全志芯片** | armv7 | arm-linux-gnueabihf | `allwinner-armv7.cmake` | 全志 ARM32 芯片 |
-| **全志V821** | riscv32 | nds32le-linux-musl-v5d | `allwinner-v821-riscv32.cmake` | 全志V821 RISC-V 无线SoC |
+| **全志V821** | riscv32 | nds32le-linux-musl-v5d | `riscv32-linux-musl.cmake` | 全志V821 RISC-V 无线SoC |
 
 ### 🔧 工具链配置
 
@@ -236,11 +236,11 @@ riscv32-linux-musl-gcc --version
 
 # 编译全志V821版本
 cd sdk
-./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
 
 # 使用特定编译选项
 export V821_CFLAGS="-g -ggdb -Wall -O3 -march=rv32imfdcxandes -mabi=ilp32d -mcmodel=medany"
-./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
 ```
 
 ### 🏗️ 自定义工具链
@@ -274,99 +274,6 @@ set(CMAKE_CXX_FLAGS "-march=armv7-a -mfpu=neon -mfloat-abi=hard")
 ```bash
 # 使用自定义工具链编译
 ./run.sh --toolchain cmake/toolchains/custom-platform.cmake
-```
-
-### 🔍 工具链检测和验证
-
-SDK 提供了工具链检测脚本，可以自动检测和验证工具链配置：
-
-```bash
-# 检测可用的工具链
-./sdk/cmake/scripts/detect_toolchains.sh
-
-# 验证特定工具链
-./sdk/cmake/scripts/verify_toolchain.sh cmake/toolchains/allwinner-aarch64.cmake
-
-# 列出所有支持的目标平台
-./run.sh --list-targets
-```
-
-### 📋 工具链安装指南
-
-#### 全志芯片工具链安装
-
-```bash
-# 方法1: 使用全志官方 SDK
-git clone https://github.com/allwinner/tina-v83x.git
-cd tina-v83x
-source build/envsetup.sh
-lunch tina_v83x-eng
-
-# 方法2: 使用预编译工具链
-wget https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
-tar -xf gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
-export PATH=$PWD/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin:$PATH
-
-# 方法3: 使用包管理器 (Ubuntu)
-sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-```
-
-#### RISC-V 工具链安装
-
-```bash
-# 使用预编译工具链
-wget https://github.com/riscv/riscv-gnu-toolchain/releases/download/2023.07.07/riscv32-glibc-ubuntu-20.04-nightly-2023.07.07-nightly.tar.gz
-tar -xf riscv32-glibc-ubuntu-20.04-nightly-2023.07.07-nightly.tar.gz
-export PATH=$PWD/riscv/bin:$PATH
-
-# 或从源码编译
-git clone https://github.com/riscv/riscv-gnu-toolchain
-cd riscv-gnu-toolchain
-./configure --prefix=/opt/riscv32 --with-arch=rv32gc --with-abi=ilp32d
-make
-```
-
-### ⚙️ 编译选项配置
-
-#### 性能优化选项
-
-```bash
-# 发布版本 (优化性能)
-./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake --config Release
-
-# 调试版本 (包含调试信息)
-./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake --config Debug
-
-# 最小体积版本
-./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake --config MinSizeRel
-```
-
-#### 特性开关
-
-```bash
-# 禁用音频模块
-./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake -DENABLE_AUDIO=OFF
-
-# 启用硬件加速
-./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake -DENABLE_HARDWARE_ACCELERATION=ON
-
-# 自定义音频后端
-./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake -DAUDIO_BACKEND=alsa
-```
-
-### 🧪 工具链测试
-
-```bash
-# 运行工具链兼容性测试
-cd sdk/build
-make test-toolchain
-
-# 测试特定平台的编译
-./test/toolchain_test.sh allwinner-aarch64
-
-# 验证交叉编译结果
-file build/install/lib/liblinx_sdk.a
-readelf -h build/install/lib/liblinx_sdk.a
 ```
 
 ## 📚 使用指南
@@ -813,19 +720,19 @@ riscv32-linux-musl-g++ --version
 
 # 5. 编译 V821 版本
 cd sdk
-./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
 
 # 6. 验证编译结果
 file build/install/lib/liblinx_sdk.a
 # 输出应显示: ELF 32-bit LSB relocatable, UCB RISC-V
 
 # 7. 编译特定模块（可选）
-./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake --target audio_codec
-./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake --target mcp_tools
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake --target audio_codec
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake --target mcp_tools
 
 # 8. 清理并重新编译（如果需要）
 make clean
-./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
 ```
 
 ### 自定义配置
