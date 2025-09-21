@@ -11,34 +11,31 @@
 #  Mongoose_ROOT - Root directory of Mongoose installation
 #  MONGOOSE_ROOT - Alternative name for Mongoose_ROOT
 
+# Set CMake policy to use <PackageName>_ROOT variables
+if(POLICY CMP0074)
+    cmake_policy(SET CMP0074 NEW)
+endif()
+
 # Set search paths
 set(_mongoose_search_paths)
 
-# Check for user-specified root directory
-if(Mongoose_ROOT)
-    list(APPEND _mongoose_search_paths ${Mongoose_ROOT})
-endif()
-
-if(MONGOOSE_ROOT)
-    list(APPEND _mongoose_search_paths ${MONGOOSE_ROOT})
-endif()
-
-# Check for environment variables
-if(DEFINED ENV{MONGOOSE_ROOT})
-    list(APPEND _mongoose_search_paths $ENV{MONGOOSE_ROOT})
-endif()
+# 获取当前脚本所在目录（等价于 CMAKE_CURRENT_SOURCE_DIR）
+get_filename_component(SCRIPT_DIR "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
+message(STATUS "Mongoose library found: ${SCRIPT_DIR}")
 
 # Add default search paths
 list(APPEND _mongoose_search_paths
-    ${CMAKE_CURRENT_SOURCE_DIR}/third/mongoose/install
-    ${CMAKE_CURRENT_SOURCE_DIR}/../third/mongoose/install
+    ${SCRIPT_DIR}/third/mongoose
+    ${SCRIPT_DIR}/../third/mongoose
+    ${SCRIPT_DIR}/third/mongoose/install
+    ${SCRIPT_DIR}/../third/mongoose/install
 )
 
 # Find mongoose.h header file
 find_path(Mongoose_INCLUDE_DIR
     NAMES mongoose.h
     PATHS ${_mongoose_search_paths}
-    PATH_SUFFIXES include src .
+    PATH_SUFFIXES include install/include src .
     DOC "Mongoose include directory"
 )
 

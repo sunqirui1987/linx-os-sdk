@@ -3,7 +3,7 @@
 <div align="center">
 
 ![LinX OS SDK](https://img.shields.io/badge/LinX%20OS%20SDK-v1.0.0-blue)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20ESP32-lightgrey)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20ESP32%20%7C%20Allwinner-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Build](https://img.shields.io/badge/build-CMake-orange)
 
@@ -21,9 +21,11 @@ LinX OS SDK 是一个跨平台的智能语音交互软件开发工具包，专�
 - **🔊 高质量编解码**: 集成 Opus 音频编解码器，提供优秀的音质和压缩率
 - **🌐 WebSocket 通信**: 基于 WebSocket 的实时双向通信协议
 - **🔧 MCP 协议支持**: 支持 Model Context Protocol，实现工具调用和扩展功能
-- **🖥️ 跨平台兼容**: 支持 macOS、Linux、ESP32 等多个平台
+- **🖥️ 跨平台兼容**: 支持 macOS、Linux、ESP32、全志芯片等多个平台
 - **📦 模块化设计**: 采用模块化架构，便于扩展和维护
 - **🔒 线程安全**: 多线程安全设计，支持并发操作
+
+
 
 ### 🏗️ 架构概览
 
@@ -57,6 +59,12 @@ LinX OS SDK
 - ESP-IDF 4.4 或更高版本
 - Xtensa 工具链
 
+#### 全志芯片 (Allwinner)
+- 全志 SDK 开发环境
+- ARM 交叉编译工具链
+- 支持 A64、H3、H5、H6、H616 等系列芯片
+- Tina Linux 或 Ubuntu 系统
+
 ### 🛠️ 安装依赖
 
 #### macOS
@@ -84,7 +92,7 @@ sudo yum install cmake alsa-lib-devel portaudio-devel pkgconfig
 
 #### 1. 克隆项目
 ```bash
-git clone https://github.com/your-org/linx-os-sdk.git
+git clone https://github.com/sunqirui1987/linx-os-sdk.git
 cd linx-os-sdk
 ```
 
@@ -92,7 +100,7 @@ cd linx-os-sdk
 ```bash
 cd sdk
 chmod +x run.sh
-./run.sh
+export RISCV32_TOOLCHAIN_PATH="/home/sqr-ubuntu/nds32le-linux-musl-v5d" && ./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake 
 ```
 
 构建脚本会自动：
@@ -120,6 +128,245 @@ make
 
 # 查看帮助
 ./linx_demo --help
+```
+
+## 🔧 编译工具链集成
+
+LinX OS SDK 提供了完整的跨平台编译工具链支持，通过 CMake 工具链文件实现不同目标平台的编译。SDK 支持多种架构和操作系统，包括嵌入式设备和桌面系统。
+
+### 🛠️ 工具链架构
+
+```
+编译工具链系统
+├── 🖥️ 主机平台 (Host)
+│   ├── macOS (x86_64/arm64)
+│   ├── Linux (x86_64/arm64)
+│   └── Windows (x86_64)
+├── 🎯 目标平台 (Target)
+│   ├── ARM Linux (arm-linux-gnueabihf)
+│   ├── RISC-V (riscv32/riscv64)
+│   ├── ESP32 (xtensa-esp32)
+│   ├── 全志芯片 (aarch64-linux-gnu)
+│   └── x86_64 Linux (native)
+└── 🔗 交叉编译工具链
+    ├── GCC 工具链
+    ├── Clang/LLVM 工具链
+    └── 厂商专用工具链
+```
+
+### 📦 支持的工具链
+
+| 平台 | 架构 | 工具链 | CMake 工具链文件 | 说明 |
+|------|------|--------|------------------|------|
+| **Linux x86_64** | x86_64 | GCC/Clang | `native-linux.cmake` | 本地编译 |
+| **ARM Linux** | armv7/armv8 | arm-linux-gnueabihf | `arm-linux-gnueabihf.cmake` | ARM 嵌入式 Linux |
+| **RISC-V** | riscv32/riscv64 | riscv-linux-musl | `riscv32-linux-musl.cmake` | RISC-V 架构 |
+| **ESP32** | xtensa | esp-idf | `esp32.cmake` | ESP32 物联网平台 |
+| **全志芯片** | aarch64 | aarch64-linux-gnu | `allwinner-aarch64.cmake` | 全志 ARM64 芯片 |
+| **全志芯片** | armv7 | arm-linux-gnueabihf | `allwinner-armv7.cmake` | 全志 ARM32 芯片 |
+| **全志V821** | riscv32 | nds32le-linux-musl-v5d | `allwinner-v821-riscv32.cmake` | 全志V821 RISC-V 无线SoC |
+
+### 🔧 工具链配置
+
+#### 1. RISC-V 工具链配置
+
+```bash
+# 设置 RISC-V 工具链路径
+export RISCV32_TOOLCHAIN_PATH="/opt/riscv32-linux-musl"
+
+# 编译 RISC-V 32位版本
+cd sdk
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
+
+# 编译 RISC-V 64位版本
+export RISCV64_TOOLCHAIN_PATH="/opt/riscv64-linux-musl"
+./run.sh --toolchain cmake/toolchains/riscv64-linux-musl.cmake
+```
+
+#### 2. 全志芯片工具链配置
+
+```bash
+# 全志 A64/H5/H6 系列 (ARM64)
+export ALLWINNER_TOOLCHAIN_PATH="/opt/aarch64-linux-gnu"
+export ALLWINNER_SYSROOT="/opt/allwinner-sysroot"
+
+# 编译全志 ARM64 版本
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake
+
+# 全志 H3/H2+ 系列 (ARM32)
+export ALLWINNER_ARM32_TOOLCHAIN_PATH="/opt/arm-linux-gnueabihf"
+./run.sh --toolchain cmake/toolchains/allwinner-armv7.cmake
+```
+
+#### 3. ESP32 工具链配置
+
+```bash
+# 设置 ESP-IDF 环境
+source $IDF_PATH/export.sh
+
+# 编译 ESP32 版本
+./run.sh --toolchain cmake/toolchains/esp32.cmake
+```
+
+#### 4. ARM Linux 工具链配置
+
+```bash
+# ARM 硬浮点工具链
+export ARM_TOOLCHAIN_PATH="/opt/arm-linux-gnueabihf"
+./run.sh --toolchain cmake/toolchains/arm-linux-gnueabihf.cmake
+
+# ARM 软浮点工具链
+export ARM_TOOLCHAIN_PATH="/opt/arm-linux-gnueabi"
+./run.sh --toolchain cmake/toolchains/arm-linux-gnueabi.cmake
+```
+
+#### 5. 全志V821 RISC-V 工具链配置
+
+```bash
+# 下载并解压工具链
+# 链接: https://pan.baidu.com/s/1f-xLwrOjHntsW4LyO1KKWw 提取码: 5ser
+tar -xf nds32le-linux-musl-v5d.tar.xz
+
+# 设置全志V821工具链路径
+export ALLWINNER_V821_TOOLCHAIN_PATH="/path/to/nds32le-linux-musl-v5d"
+export PATH="$ALLWINNER_V821_TOOLCHAIN_PATH/bin:$PATH"
+
+# 验证工具链
+riscv32-linux-musl-gcc --version
+
+# 编译全志V821版本
+cd sdk
+./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
+
+# 使用特定编译选项
+export V821_CFLAGS="-g -ggdb -Wall -O3 -march=rv32imfdcxandes -mabi=ilp32d -mcmodel=medany"
+./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
+```
+
+### 🏗️ 自定义工具链
+
+#### 创建自定义工具链文件
+
+```cmake
+# 示例: cmake/toolchains/custom-platform.cmake
+
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR arm)
+
+# 设置工具链路径
+set(TOOLCHAIN_PREFIX arm-custom-linux-gnueabihf)
+set(CMAKE_C_COMPILER ${TOOLCHAIN_PREFIX}-gcc)
+set(CMAKE_CXX_COMPILER ${TOOLCHAIN_PREFIX}-g++)
+
+# 设置系统根目录
+set(CMAKE_FIND_ROOT_PATH /opt/custom-sysroot)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+
+# 设置编译选项
+set(CMAKE_C_FLAGS "-march=armv7-a -mfpu=neon -mfloat-abi=hard")
+set(CMAKE_CXX_FLAGS "-march=armv7-a -mfpu=neon -mfloat-abi=hard")
+```
+
+#### 使用自定义工具链
+
+```bash
+# 使用自定义工具链编译
+./run.sh --toolchain cmake/toolchains/custom-platform.cmake
+```
+
+### 🔍 工具链检测和验证
+
+SDK 提供了工具链检测脚本，可以自动检测和验证工具链配置：
+
+```bash
+# 检测可用的工具链
+./sdk/cmake/scripts/detect_toolchains.sh
+
+# 验证特定工具链
+./sdk/cmake/scripts/verify_toolchain.sh cmake/toolchains/allwinner-aarch64.cmake
+
+# 列出所有支持的目标平台
+./run.sh --list-targets
+```
+
+### 📋 工具链安装指南
+
+#### 全志芯片工具链安装
+
+```bash
+# 方法1: 使用全志官方 SDK
+git clone https://github.com/allwinner/tina-v83x.git
+cd tina-v83x
+source build/envsetup.sh
+lunch tina_v83x-eng
+
+# 方法2: 使用预编译工具链
+wget https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
+tar -xf gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
+export PATH=$PWD/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin:$PATH
+
+# 方法3: 使用包管理器 (Ubuntu)
+sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+```
+
+#### RISC-V 工具链安装
+
+```bash
+# 使用预编译工具链
+wget https://github.com/riscv/riscv-gnu-toolchain/releases/download/2023.07.07/riscv32-glibc-ubuntu-20.04-nightly-2023.07.07-nightly.tar.gz
+tar -xf riscv32-glibc-ubuntu-20.04-nightly-2023.07.07-nightly.tar.gz
+export PATH=$PWD/riscv/bin:$PATH
+
+# 或从源码编译
+git clone https://github.com/riscv/riscv-gnu-toolchain
+cd riscv-gnu-toolchain
+./configure --prefix=/opt/riscv32 --with-arch=rv32gc --with-abi=ilp32d
+make
+```
+
+### ⚙️ 编译选项配置
+
+#### 性能优化选项
+
+```bash
+# 发布版本 (优化性能)
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake --config Release
+
+# 调试版本 (包含调试信息)
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake --config Debug
+
+# 最小体积版本
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake --config MinSizeRel
+```
+
+#### 特性开关
+
+```bash
+# 禁用音频模块
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake -DENABLE_AUDIO=OFF
+
+# 启用硬件加速
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake -DENABLE_HARDWARE_ACCELERATION=ON
+
+# 自定义音频后端
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake -DAUDIO_BACKEND=alsa
+```
+
+### 🧪 工具链测试
+
+```bash
+# 运行工具链兼容性测试
+cd sdk/build
+make test-toolchain
+
+# 测试特定平台的编译
+./test/toolchain_test.sh allwinner-aarch64
+
+# 验证交叉编译结果
+file build/install/lib/liblinx_sdk.a
+readelf -h build/install/lib/liblinx_sdk.a
 ```
 
 ## 📚 使用指南
@@ -447,6 +694,13 @@ linx-os-sdk/
     │   ├── PlatformDetection.cmake # 平台检测
     │   ├── platforms/           # 平台特定配置
     │   ├── toolchains/          # 工具链配置
+    │   │   ├── allwinner-aarch64.cmake    # 全志 ARM64 工具链
+    │   │   ├── allwinner-armv7.cmake      # 全志 ARM32 工具链
+    │   │   ├── allwinner-tina.cmake       # 全志 Tina SDK 工具链
+    │   │   ├── riscv32-linux-musl.cmake   # RISC-V 32位工具链
+    │   │   ├── riscv64-linux-musl.cmake   # RISC-V 64位工具链
+    │   │   ├── esp32.cmake                # ESP32 工具链
+    │   │   └── arm-linux-gnueabihf.cmake  # ARM Linux 工具链
     │   └── templates/           # 模板文件
     └── third/                   # 第三方库
         ├── mongoose/            # Mongoose WebSocket 库
@@ -467,10 +721,111 @@ cd sdk
 ./run.sh --toolchain cmake/toolchains/esp32.cmake
 ```
 
+#### 全志芯片平台
+
+##### 全志 A64/H5/H6 系列 (ARM64)
+```bash
+# 1. 安装工具链
+sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+# 2. 设置环境变量
+export ALLWINNER_TOOLCHAIN_PATH="/usr/bin"
+export ALLWINNER_SYSROOT="/usr/aarch64-linux-gnu"
+
+# 3. 编译 SDK
+cd sdk
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake
+
+# 4. 验证编译结果
+file build/install/lib/liblinx_sdk.a
+# 输出应显示: ELF 64-bit LSB relocatable, ARM aarch64
+```
+
+##### 全志 H3/H2+ 系列 (ARM32)
+```bash
+# 1. 安装工具链
+sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+
+# 2. 设置环境变量
+export ALLWINNER_ARM32_TOOLCHAIN_PATH="/usr/bin"
+export ALLWINNER_ARM32_SYSROOT="/usr/arm-linux-gnueabihf"
+
+# 3. 编译 SDK
+./run.sh --toolchain cmake/toolchains/allwinner-armv7.cmake
+
+# 4. 验证编译结果
+file build/install/lib/liblinx_sdk.a
+# 输出应显示: ELF 32-bit LSB relocatable, ARM
+```
+
+##### 使用全志官方 SDK
+```bash
+# 1. 下载全志 SDK
+git clone https://github.com/allwinner/tina-v83x.git
+cd tina-v83x
+
+# 2. 初始化环境
+source build/envsetup.sh
+lunch tina_v83x-eng
+
+# 3. 设置工具链路径
+export ALLWINNER_TOOLCHAIN_PATH="$PWD/prebuilt/gcc/linux-x86/aarch64/toolchain-sunxi-musl/toolchain/bin"
+
+# 4. 编译 LinX SDK
+cd /path/to/linx-os-sdk/sdk
+./run.sh --toolchain cmake/toolchains/allwinner-tina.cmake
+```
+
 #### ARM Linux 平台
 ```bash
 # 使用 ARM 工具链编译
 ./run.sh --toolchain cmake/toolchains/arm-linux-gnueabihf.cmake
+```
+
+#### RISC-V 平台
+
+##### 通用 RISC-V 工具链
+```bash
+# 设置 RISC-V 工具链路径
+export RISCV32_TOOLCHAIN_PATH="/opt/riscv32-linux-musl"
+
+# 编译 RISC-V 版本
+./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
+```
+
+##### 全志 V821 RISC-V 平台
+```bash
+# 1. 下载并解压工具链
+# 链接: https://pan.baidu.com/s/1f-xLwrOjHntsW4LyO1KKWw 提取码: 5ser
+tar -xf nds32le-linux-musl-v5d.tar.xz
+
+# 2. 设置工具链环境
+export ALLWINNER_V821_TOOLCHAIN_PATH="/path/to/nds32le-linux-musl-v5d"
+export PATH="$ALLWINNER_V821_TOOLCHAIN_PATH/bin:$PATH"
+
+# 3. 设置编译选项
+export V821_CFLAGS="-g -ggdb -Wall -O3 -march=rv32imfdcxandes -mabi=ilp32d -mcmodel=medany"
+export V821_CXXFLAGS="$V821_CFLAGS"
+
+# 4. 验证工具链
+riscv32-linux-musl-gcc --version
+riscv32-linux-musl-g++ --version
+
+# 5. 编译 V821 版本
+cd sdk
+./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
+
+# 6. 验证编译结果
+file build/install/lib/liblinx_sdk.a
+# 输出应显示: ELF 32-bit LSB relocatable, UCB RISC-V
+
+# 7. 编译特定模块（可选）
+./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake --target audio_codec
+./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake --target mcp_tools
+
+# 8. 清理并重新编译（如果需要）
+make clean
+./run.sh --toolchain cmake/toolchains/allwinner-v821-riscv32.cmake
 ```
 
 ### 自定义配置
@@ -566,6 +921,36 @@ export LINX_LOG_LEVEL=DEBUG
 
 # Linux 音频权限
 sudo usermod -a -G audio $USER
+```
+
+#### 5. 全志芯片编译问题
+```bash
+# 工具链路径错误
+export ALLWINNER_TOOLCHAIN_PATH="/usr/bin"
+export PATH="/usr/bin:$PATH"
+
+# 缺少系统库
+sudo apt install libc6-dev-arm64-cross
+
+# 验证工具链
+aarch64-linux-gnu-gcc --version
+
+# 清理并重新编译
+rm -rf build
+./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake
+```
+
+#### 6. RISC-V 编译问题
+```bash
+# 工具链未找到
+export RISCV32_TOOLCHAIN_PATH="/opt/riscv32-linux-musl"
+export PATH="$RISCV32_TOOLCHAIN_PATH/bin:$PATH"
+
+# 验证 RISC-V 工具链
+riscv32-linux-musl-gcc --version
+
+# 检查目标架构
+readelf -h build/install/lib/liblinx_sdk.a | grep Machine
 ```
 
 ### 调试技巧

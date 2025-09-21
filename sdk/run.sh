@@ -361,6 +361,8 @@ parse_arguments() {
                         exit 1
                     fi
                 fi
+                # Convert to absolute path
+                TOOLCHAIN_FILE="$(cd "$(dirname "${TOOLCHAIN_FILE}")" && pwd)/$(basename "${TOOLCHAIN_FILE}")"
                 print_info "Using toolchain: ${TOOLCHAIN_FILE}"
                 shift 2
                 ;;
