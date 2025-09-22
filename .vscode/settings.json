@@ -47,6 +47,7 @@
         "linx_websocket.h": "c",
         "cstdlib": "c",
         "ctime": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "math.h": "c"
     }
 }

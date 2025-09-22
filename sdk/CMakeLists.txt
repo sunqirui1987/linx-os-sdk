@@ -24,6 +24,7 @@ add_subdirectory(mcp)
 add_subdirectory(protocols)
 add_subdirectory(codecs)
 add_subdirectory(audio)
+add_subdirectory(play)
 
 # =============================================================================
 # Create unified static library
@@ -37,6 +38,7 @@ set(LINX_SDK_SOURCES
     ${LINX_PROTOCOLS_SOURCES}
     ${LINX_CODEC_SOURCES}
     ${LINX_AUDIO_SOURCES}
+    ${LINX_PLAY_SOURCES}
     linx_sdk.c
 )
 
@@ -48,6 +50,7 @@ set(LINX_SDK_DIRS
     ${LINX_MCP_INCLUDE_DIRS}
     ${LINX_PROTOCOLS_INCLUDE_DIRS}
     ${LINX_CJSON_INCLUDE_DIRS}
+    ${LINX_PLAY_INCLUDE_DIRS}
 )
 
 # Collect all platform-specific libraries
