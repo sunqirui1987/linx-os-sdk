@@ -5,3 +5,6 @@ sdk/codecs/test/build
 sdk/mcp/test/build
 sdk/protocols/test/build
 sdk/play/test/build
+examples/build
+examples/mac/build
+board/mac/build

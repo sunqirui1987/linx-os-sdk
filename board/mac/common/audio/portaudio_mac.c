@@ -1,5 +1,5 @@
 #include "portaudio_mac.h"
-#include "../log/linx_log.h"
+#include "linx_log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

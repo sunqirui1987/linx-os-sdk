@@ -48,6 +48,10 @@
         "cstdlib": "c",
         "ctime": "c",
         "stdbool.h": "c",
-        "math.h": "c"
+        "math.h": "c",
+        "stdlib.h": "c",
+        "portaudio_mac.h": "c",
+        "audio_codec.h": "c",
+        "string.h": "c"
     }
 }
