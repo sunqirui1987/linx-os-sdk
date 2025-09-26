@@ -9,3 +9,4 @@ examples/build
 examples/mac/build
 board/mac/build
 out
+sdk/ota/test/build

@@ -5,8 +5,6 @@ project(linx_board_mac C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Include platform detection
-include(${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/cmake/PlatformDetection.cmake)
 
 # Verify this is macOS platform
 if(NOT LINX_PLATFORM_NAME STREQUAL "macos")

@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/PlatformDetection.cmake)
-# Detect platform
-detect_linx_platform()
+
 
 # 音频库通用源文件
 set(AUDIO_SOURCES

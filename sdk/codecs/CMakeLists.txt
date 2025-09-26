@@ -7,10 +7,6 @@ message(STATUS "Current directory: ${CMAKE_CURRENT_LIST_DIR}")
 # 或者直接使用
 message(STATUS "Current directory: ${CMAKE_CURRENT_LIST_DIR}")
 
-# 包含平台检测模块
-include(${CMAKE_CURRENT_LIST_DIR}/../cmake/PlatformDetection.cmake)
-# Detect platform
-detect_linx_platform()
 
 
 # 编解码器库基础源文件

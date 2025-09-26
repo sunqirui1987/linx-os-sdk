@@ -36,6 +36,7 @@ target_compile_definitions(mongoose PUBLIC
     MG_ENABLE_LINES=1
     MG_ENABLE_IPV6=1
     MG_ENABLE_LOG=1
+    MG_TLS=MG_TLS_BUILTIN
 )
 
 # Compiler flags

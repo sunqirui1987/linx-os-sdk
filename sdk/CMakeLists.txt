@@ -5,8 +5,6 @@ project(linx_sdk C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Include platform detection (auto-detects platform)
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PlatformDetection.cmake)
 
 # Include find modules
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -44,6 +42,7 @@ add_subdirectory(protocols)
 add_subdirectory(codecs)
 add_subdirectory(audio)
 add_subdirectory(play)
+add_subdirectory(ota)
 
 
 

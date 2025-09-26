@@ -6,9 +6,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(SDK_DIR ${CMAKE_CURRENT_LIST_DIR}/../../)
 
-# Include platform detection (auto-detects platform)
-include(${SDK_DIR}/cmake/PlatformDetection.cmake)
-detect_linx_platform()
+
 
 
 # Include find modules first
