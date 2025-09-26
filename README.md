@@ -24,7 +24,7 @@ LinX OS SDK 是一个跨平台的智能语音交互软件开发工具包，专�
 - **🖥️ 跨平台兼容**: 支持 macOS、Linux、ESP32、全志芯片等多个平台
 - **📦 模块化设计**: 采用模块化架构，便于扩展和维护
 - **🔒 线程安全**: 多线程安全设计，支持并发操作
-- **⚙️ 统一构建系统**: 提供 menuconfig 配置界面，一键选择平台和工具链
+- **⚙️ 统一构建系统**: 提供 linxos.py 配置选择界面，一键选择平台和工具链
 - **🏗️ 智能编译**: 自动检测工具链，支持 SDK → Board → Examples 分层编译
 
 
@@ -34,7 +34,7 @@ LinX OS SDK 是一个跨平台的智能语音交互软件开发工具包，专�
 ```
 LinX OS SDK 分层架构
 ├── ⚙️ 构建配置层 (Build Configuration)
-│   ├── menuconfig 配置界面
+│   ├── linxos.py 配置选择界面
 │   ├── 平台和工具链选择
 │   └── 预设配置管理
 ├── 🏗️ SDK 核心层 (Core SDK)
@@ -112,59 +112,45 @@ git clone https://github.com/sunqirui1987/linx-os-sdk.git
 cd linx-os-sdk
 ```
 
-#### 2. 配置构建选项 (menuconfig)
+#### 2. 配置构建选项
 
 LinX OS SDK 提供了统一的配置界面，让您可以轻松选择目标平台、工具链和编译选项：
 
 ```bash
-# 启动配置界面
-make menuconfig
+# 启动配置选择界面
+./linxos.py config choice
 ```
 
-配置界面包含以下选项：
+配置选择界面显示可用的预设配置：
 
 ```
-┌─────────────────── LinX OS SDK Configuration ───────────────────┐
-│                                                                  │
-│ Target Platform Selection                                        │
-│   ● Native (Host Platform)                                      │
-│   ○ ARM Linux (Embedded)                                        │
-│   ○ RISC-V (32-bit)                                            │
-│   ○ RISC-V (64-bit)                                            │
-│   ○ ESP32 (IoT Platform)                                        │
-│   ○ Allwinner A64/H5/H6 (ARM64)                                │
-│   ○ Allwinner H3/H2+ (ARM32)                                   │
-│   ○ Allwinner V821 (RISC-V)                                    │
-│                                                                  │
-│ Board Platform Selection                                         │
-│   ● Generic                                                     │
-│   ○ macOS Development Board                                     │
-│   ○ Allwinner AWOL Board                                       │
-│   ○ ESP32 DevKit                                               │
-│   ○ Custom Board                                               │
-│                                                                  │
-│ Toolchain Configuration                                          │
-│   Toolchain Path: [/opt/toolchain]                             │
-│   Sysroot Path:   [/opt/sysroot]                               │
-│   Custom CFLAGS:  [-O2 -g]                                     │
-│                                                                  │
-│ Build Options                                                    │
-│   [*] Enable Debug Build                                        │
-│   [*] Build Examples                                            │
-│   [*] Build Tests                                               │
-│   [ ] Enable Static Linking                                     │
-│                                                                  │
-│ Audio Configuration                                              │
-│   [*] Enable Opus Codec                                         │
-│   [*] Enable PortAudio                                          │
-│   Sample Rate: [16000]                                          │
-│                                                                  │
-│ Network Configuration                                            │
-│   [*] Enable WebSocket Support                                  │
-│   [*] Enable SSL/TLS                                            │
-│   Default Server: [ws://localhost:8080/v1/ws/]                  │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+LinX OS SDK 配置选择:
+============================================================
+当前配置:
+  配置名称: 当前配置
+  目标平台: native
+  板框平台: mac
+  构建类型: Release
+  工具链文件: 
+  SDK状态: 已编译
+  Board状态: 已编译
+
+可用配置选项:
+------------------------------------------------------------
+   1. LN882H          - LN882H WiFi芯片开发板
+      平台: ln882h     板框: ln882h
+   2. Ubuntu          - Ubuntu Linux 本地开发环境
+      平台: native     板框: ubuntu
+   3. ESP32           - ESP32 WiFi+蓝牙微控制器
+      平台: esp32      板框: esp32
+   4. macOS           - macOS 本地开发环境
+      平台: native     板框: mac
+   5. RISC-V32        - RISC-V 32位嵌入式Linux系统
+      平台: riscv32    板框: generic
+------------------------------------------------------------
+输入 "q" 退出配置选择
+
+请选择配置 (1-5, 回车保持当前配置):
 ```
 
 #### 3. 一键构建
@@ -173,12 +159,12 @@ make menuconfig
 
 ```bash
 # 构建整个项目 (SDK + Board + Examples)
-make all
+./linxos.py build all
 
 # 或者分步构建
-make sdk          # 仅构建 SDK
-make board        # 构建板级支持
-make examples     # 构建示例程序
+./linxos.py build sdk          # 仅构建 SDK
+./linxos.py build board        # 构建板级支持
+./linxos.py build examples     # 构建示例程序
 ```
 
 构建系统会自动：
@@ -196,35 +182,35 @@ make examples     # 构建示例程序
 
 ```bash
 # 使用预设配置
-make config-native      # 本地开发配置
-make config-riscv32     # RISC-V 32位配置
-make config-esp32       # ESP32 配置
-make config-allwinner   # 全志芯片配置
+./linxos.py config preset native      # 本地开发配置
+./linxos.py config preset riscv32     # RISC-V 32位配置
+./linxos.py config preset esp32       # ESP32 配置
+./linxos.py config preset allwinner   # 全志芯片配置
 
 # 查看所有可用预设
-make list-configs
+./linxos.py config list
 ```
 
 #### 5. 高级构建选项
 
 ```bash
 # 清理构建文件
-make clean
+./linxos.py clean
 
 # 完全清理 (包括配置)
-make distclean
+./linxos.py distclean
 
 # 仅重新配置
-make reconfig
+./linxos.py config reconfig
 
 # 显示构建信息
-make info
+./linxos.py info
 
 # 并行构建 (使用多核)
-make -j$(nproc)
+./linxos.py build all -j$(nproc)
 
 # 详细构建日志
-make VERBOSE=1
+./linxos.py build all --verbose
 ```
 
 ### 🎯 运行演示
@@ -233,7 +219,7 @@ make VERBOSE=1
 
 ```bash
 # 运行演示程序 (根据配置的平台自动选择)
-make run
+./linxos.py run
 
 # 或者直接运行可执行文件
 ./build/examples/linx_demo
@@ -259,13 +245,13 @@ make run
 ##### ESP32 平台
 ```bash
 # 烧录到设备
-make flash
+./linxos.py flash
 
 # 监控串口输出
-make monitor
+./linxos.py monitor
 
 # 烧录并监控
-make flash monitor
+./linxos.py flash monitor
 ```
 
 ##### 全志平台
@@ -280,19 +266,19 @@ ssh root@target-device
 
 ## 🔧 编译工具链集成
 
-LinX OS SDK 提供了完整的跨平台编译工具链支持，通过统一的 menuconfig 配置界面和自动化构建系统，大大简化了跨平台编译的复杂性。SDK 支持多种架构和操作系统，包括嵌入式设备和桌面系统。
+LinX OS SDK 提供了完整的跨平台编译工具链支持，通过统一的 linxos.py 配置选择界面和自动化构建系统，大大简化了跨平台编译的复杂性。SDK 支持多种架构和操作系统，包括嵌入式设备和桌面系统。
 
 ### 🛠️ 统一构建系统架构
 
 ```
 LinX OS SDK 构建系统
 ├── 📋 配置层 (Configuration Layer)
-│   ├── menuconfig 界面配置
-│   ├── 预设配置文件
+│   ├── linxos.py 配置选择界面
+│   ├── 预设配置文件 (build/configs/*.config)
 │   └── 环境变量检测
 ├── 🔧 工具链管理 (Toolchain Management)
 │   ├── 自动工具链检测
-│   ├── 工具链路径配置
+│   ├── 工具链路径配置 (build/toolchains/*.cmake)
 │   └── 交叉编译环境设置
 ├── 🏗️ 构建引擎 (Build Engine)
 │   ├── SDK 核心编译
@@ -306,44 +292,49 @@ LinX OS SDK 构建系统
 
 ### 🎯 支持的目标平台
 
-| 平台类别 | 目标平台 | 架构 | 工具链 | menuconfig 选项 |
-|---------|---------|------|--------|----------------|
-| **桌面平台** | Native Host | x86_64/arm64 | GCC/Clang | `Native (Host Platform)` |
-| **ARM 嵌入式** | ARM Linux | armv7/armv8 | arm-linux-gnueabihf | `ARM Linux (Embedded)` |
-| **RISC-V** | RISC-V 32位 | riscv32 | riscv32-linux-musl | `RISC-V (32-bit)` |
-| **RISC-V** | RISC-V 64位 | riscv64 | riscv64-linux-musl | `RISC-V (64-bit)` |
-| **物联网** | ESP32 | xtensa | esp-idf | `ESP32 (IoT Platform)` |
-| **全志芯片** | A64/H5/H6 | aarch64 | aarch64-linux-gnu | `Allwinner A64/H5/H6 (ARM64)` |
-| **全志芯片** | H3/H2+ | armv7 | arm-linux-gnueabihf | `Allwinner H3/H2+ (ARM32)` |
-| **全志芯片** | V821 | riscv32 | nds32le-linux-musl-v5d | `Allwinner V821 (RISC-V)` |
+| 平台类别 | 目标平台 | 架构 | 工具链 | 配置文件 |
+|---------|---------|------|--------|------------|
+| **桌面平台** | macOS/Ubuntu | x86_64/arm64 | GCC/Clang | `macOS.config` / `Ubuntu.config` |
+| **ARM 嵌入式** | LN882H | armv7 | arm-linux-gnueabihf | `LN882H.config` |
+| **RISC-V** | RISC-V 32位 | riscv32 | riscv32-linux-musl | `RISC-V32.config` |
+| **物联网** | ESP32 | xtensa | esp-idf | `ESP32.config` |
 
 ### 🔧 工具链自动配置
 
-通过 menuconfig 配置界面，工具链配置变得非常简单。系统会自动检测和配置工具链，无需手动设置复杂的环境变量。
+通过 linxos.py 配置选择界面，工具链配置变得非常简单。系统会根据选择的配置文件自动设置工具链，无需手动设置复杂的环境变量。
 
-#### 1. 自动工具链检测
+#### 1. 配置文件管理
 
 ```bash
-# 启动配置界面
-make menuconfig
+# 启动配置选择界面
+./linxos.py config choice
 
-# 系统会自动检测以下工具链：
-# ✓ 检测到 GCC 工具链: /usr/bin/gcc
-# ✓ 检测到 ARM 工具链: /opt/arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc
-# ✓ 检测到 RISC-V 工具链: /opt/riscv32/bin/riscv32-linux-musl-gcc
-# ✓ 检测到 ESP-IDF: /opt/esp-idf
+# 可用的预设配置文件位于 build/configs/ 目录：
+# ✓ LN882H.config          - LN882H WiFi芯片开发板
+# ✓ Ubuntu.config          - Ubuntu Linux 本地开发环境  
+# ✓ ESP32.config           - ESP32 WiFi+蓝牙微控制器
+# ✓ macOS.config           - macOS 本地开发环境
+# ✓ RISC-V32.config        - RISC-V 32位嵌入式Linux系统
 ```
 
-#### 2. 工具链路径配置
+#### 2. 工具链文件配置
 
-如果系统未自动检测到工具链，可以在 menuconfig 中手动指定：
+每个配置文件都指定了相应的工具链文件，位于 `build/toolchains/` 目录：
 
 ```
-Toolchain Configuration
-├── Toolchain Path: [/opt/your-toolchain]
-├── Sysroot Path:   [/opt/your-sysroot]
-├── Custom CFLAGS:  [-O2 -g -march=native]
-└── Custom LDFLAGS: [-static]
+build/toolchains/
+├── arm-linux-gnueabihf.cmake    # ARM Linux 工具链 (LN882H)
+├── esp32.cmake                  # ESP32 工具链
+├── riscv32-linux-musl.cmake     # RISC-V 32位工具链
+└── (本地平台无需工具链文件)
+```
+
+配置文件示例 (`build/configs/LN882H.config`)：
+```
+CONFIG_TOOLCHAIN_FILE="arm-linux-gnueabihf.cmake"
+CONFIG_TOOLCHAIN_PREFIX="arm-linux-gnueabihf"
+CONFIG_ARCH="arm"
+CONFIG_CPU="cortex-a7"
 ```
 
 #### 3. 常用工具链安装
