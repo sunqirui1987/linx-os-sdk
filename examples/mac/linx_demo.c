@@ -30,6 +30,7 @@
 #include "board/mac/audio/portaudio_mac.h"
 #include "codecs/audio_codec.h"
 #include "codecs/opus_codec.h"
+#include "play/linx_player.h"
 #include "mcp/mcp_server.h"
 #include "log/linx_log.h"
 
@@ -39,6 +40,7 @@ typedef struct {
     AudioInterface* audio_interface;
     audio_codec_t* opus_encoder;
     audio_codec_t* opus_decoder;
+    linx_player_t* player;  // 使用linx_player模块
     mcp_server_t* mcp_server;
     
     bool running;
@@ -74,6 +76,7 @@ bool g_has_audio_data = false;
 // 函数声明
 static void signal_handler(int sig);
 static void event_handler(const LinxEvent* event, void* user_data);
+static void player_event_callback(player_state_t old_state, player_state_t new_state, void* user_data);
 static bool init_demo(const char* server_url);
 static void cleanup_demo(void);
 static void* audio_thread_func(void* arg);
@@ -86,6 +89,34 @@ static void check_tts_playback_complete(void);
 static void setup_mcp_tools(void);
 static void interactive_mode(void);
 static void print_usage(const char* program_name);
+
+// 播放器事件回调函数
+static void player_event_callback(player_state_t old_state, player_state_t new_state, void* user_data) {
+    (void)old_state; // 避免未使用参数警告
+    (void)user_data; // 避免未使用参数警告
+    
+    switch (new_state) {
+        case PLAYER_STATE_PLAYING:
+            LOG_INFO("🔊 播放器开始播放");
+            g_demo.playing = true;
+            break;
+        case PLAYER_STATE_STOPPED:
+        case PLAYER_STATE_IDLE:
+            LOG_INFO("🔇 播放器停止播放");
+            g_demo.playing = false;
+            g_demo.tts_data_complete = false;
+            break;
+        case PLAYER_STATE_PAUSED:
+            LOG_INFO("⏸️ 播放器暂停");
+            break;
+        case PLAYER_STATE_ERROR:
+            LOG_ERROR("❌ 播放器错误");
+            g_demo.playing = false;
+            break;
+        default:
+            break;
+    }
+}
 
 // MCP工具回调函数
 static mcp_return_value_t weather_tool_callback(const struct mcp_property_list* properties) {
@@ -126,6 +157,7 @@ static void signal_handler(int sig) {
  * 事件处理函数
  */
 static void event_handler(const LinxEvent* event, void* user_data) {
+    (void)user_data; // 避免未使用参数警告
     if (!event) return;
     
     switch (event->type) {
@@ -258,12 +290,6 @@ static bool init_demo(const char* server_url) {
     audio_format_t format = {0};
     audio_format_init(&format, g_demo.sample_rate, g_demo.channels, 16, 20);
 
-
-    if (audio_interface_init_play(g_demo.audio_interface) != 0) {
-        LOG_ERROR("✗ 启动播放流失败");
-        return false;
-    }
-    
     g_demo.opus_encoder = opus_codec_create();
     g_demo.opus_decoder = opus_codec_create();
     
@@ -278,6 +304,36 @@ static bool init_demo(const char* server_url) {
         LOG_ERROR("✗ 初始化Opus编解码器失败");
         return false;
     }
+    
+    // 创建并初始化播放器
+    g_demo.player = linx_player_create(g_demo.audio_interface, g_demo.opus_decoder);
+    if (!g_demo.player) {
+        LOG_ERROR("✗ 创建播放器失败");
+        return false;
+    }
+    
+    // 配置播放器
+    player_audio_config_t player_config = {
+        .sample_rate = g_demo.sample_rate,
+        .channels = g_demo.channels,
+        .frame_size = g_demo.frame_size,
+        .buffer_size = 8192
+    };
+    
+    if (linx_player_init(g_demo.player, &player_config) != PLAYER_SUCCESS) {
+        LOG_ERROR("✗ 初始化播放器失败");
+        return false;
+    }
+    
+    // 设置播放器事件回调
+    linx_player_set_event_callback(g_demo.player, player_event_callback, NULL);
+    
+    // 启动播放器，让其保持运行状态
+    if (linx_player_start(g_demo.player) != PLAYER_SUCCESS) {
+        LOG_ERROR("✗ 启动播放器失败");
+        return false;
+    }
+    LOG_INFO("✓ 播放器已启动并保持运行状态");
     
     // 设置MCP工具
     setup_mcp_tools();
@@ -329,6 +385,7 @@ static void setup_mcp_tools(void) {
  * 音频线程函数
  */
 static void* audio_thread_func(void* arg) {
+    (void)arg; // 避免未使用参数警告
     short audio_buffer[AUDIO_BUFFER_SIZE];
     uint8_t encoded_buffer[AUDIO_BUFFER_SIZE];
     
@@ -435,26 +492,16 @@ static void stop_recording(void) {
  * 播放音频
  */
 static void play_audio(const uint8_t* data, size_t size) {
-    if (!data || size == 0) return;
+    if (!data || size == 0 || !g_demo.player) return;
     
-    // 使用足够大的缓冲区来处理最大的 Opus 解码帧
-    // 120ms @ 48kHz * 2 channels = 11520 samples，为了兼容性使用更大的缓冲区
-    short decoded_buffer[12000];  // 足够处理任何 Opus 解码帧
-    size_t decoded_size = 0;
-    
-    // 解码音频
-    if (audio_codec_decode(g_demo.opus_decoder, data, size,
-                         (int16_t*)decoded_buffer, sizeof(decoded_buffer)/sizeof(short), &decoded_size) == CODEC_SUCCESS) {
-        
-        // 播放解码后的音频
-        int ret = audio_interface_write(g_demo.audio_interface, decoded_buffer, decoded_size);
-        if( ret != 0){
-            LOG_ERROR("✗ 播放失败");
-        } else {
-            // 更新最后音频播放时间（用于TTS播放完成检测）
-            gettimeofday(&g_last_audio_time, NULL);
-            g_has_audio_data = true;
-        }
+    // 使用linx_player模块播放音频（播放器已保持运行状态，只需喂数据）
+    player_error_t ret = linx_player_feed_data(g_demo.player, data, size);
+    if (ret != PLAYER_SUCCESS) {
+        LOG_ERROR("✗ 播放失败: %s", linx_player_error_string(ret));
+    } else {
+        // 更新最后音频播放时间（用于TTS播放完成检测）
+        gettimeofday(&g_last_audio_time, NULL);
+        g_has_audio_data = true;
     }
 }
 
@@ -462,13 +509,14 @@ static void play_audio(const uint8_t* data, size_t size) {
  * 检查播放缓冲区是否为空
  */
 static bool is_play_buffer_empty(void) {
-    // 使用新的音频接口直接检查播放缓冲区状态
-    if (!g_demo.audio_interface) {
+    // 使用linx_player模块检查播放缓冲区状态
+    if (!g_demo.player) {
         return true;
     }
     
-    // 直接调用音频接口的缓冲区状态检查函数
-    bool buffer_empty = audio_interface_is_play_buffer_empty(g_demo.audio_interface);
+    // 检查播放器缓冲区是否为空且播放器状态为空闲
+    bool buffer_empty = linx_player_is_buffer_empty(g_demo.player) && 
+                       (linx_player_get_state(g_demo.player) == PLAYER_STATE_IDLE);
     
     // 如果缓冲区为空，重置音频数据标志
     if (buffer_empty) {
@@ -533,6 +581,19 @@ static void interactive_mode(void) {
             printf("连接状态: %s\n", g_demo.connected ? "已连接" : "未连接");
             printf("录音状态: %s\n", g_demo.recording ? "录音中" : "未录音");
             printf("播放状态: %s\n", g_demo.playing ? "播放中" : "未播放");
+            if (g_demo.player) {
+                player_state_t state = linx_player_get_state(g_demo.player);
+                const char* state_str = "未知";
+                switch (state) {
+                    case PLAYER_STATE_IDLE: state_str = "空闲"; break;
+                    case PLAYER_STATE_PLAYING: state_str = "播放中"; break;
+                    case PLAYER_STATE_PAUSED: state_str = "暂停"; break;
+                    case PLAYER_STATE_STOPPED: state_str = "停止"; break;
+                    case PLAYER_STATE_ERROR: state_str = "错误"; break;
+                }
+                printf("播放器状态: %s\n", state_str);
+                printf("缓冲区使用率: %.1f%%\n", linx_player_get_buffer_usage(g_demo.player) * 100);
+            }
         } else if (strcmp(input, "/tools") == 0) {
             if (g_demo.mcp_server) {
                 char* tools_json = mcp_server_get_tools_list_json(g_demo.mcp_server, NULL, false);
@@ -582,6 +643,12 @@ static void cleanup_demo(void) {
         audio_codec_destroy(g_demo.opus_decoder);
     }
     
+    if (g_demo.player) {
+        // 显式停止播放器
+        linx_player_stop(g_demo.player);
+        linx_player_destroy(g_demo.player);
+    }
+    
     if (g_demo.mcp_server) {
         mcp_server_destroy(g_demo.mcp_server);
     }
@@ -622,7 +689,7 @@ int main(int argc, char* argv[]) {
 
       // 初始化日志系统
     log_config_t log_config = LOG_DEFAULT_CONFIG;
-    log_config.level = LOG_LEVEL_INFO;  // 默认INFO级别
+    log_config.level = LOG_LEVEL_DEBUG;  // 默认INFO级别
     log_config.enable_timestamp = true;
     log_config.enable_color = true;
     if (log_init(&log_config) != 0) {

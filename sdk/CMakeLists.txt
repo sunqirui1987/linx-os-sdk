@@ -131,6 +131,11 @@ install(DIRECTORY audio/
     FILES_MATCHING PATTERN "*.h"
 )
 
+install(DIRECTORY play/
+    DESTINATION include/play
+    FILES_MATCHING PATTERN "*.h"
+)
+
 # Install third-party libraries
 # Install mongoose library
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/third/mongoose/install/

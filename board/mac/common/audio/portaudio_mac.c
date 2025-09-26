@@ -275,7 +275,7 @@ int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
     } else {
         // Not enough data, output silence
         memset(output, 0, samples_to_read * sizeof(short));
-        LOG_DEBUG("Play buffer underrun, outputting silence for %lu samples", samples_to_read);
+        //LOG_DEBUG("Play buffer underrun, outputting silence for %lu samples", samples_to_read);
     }
     
     pthread_mutex_unlock(&data->play_mutex);

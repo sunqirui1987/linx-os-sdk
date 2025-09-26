@@ -373,7 +373,7 @@ static void* audio_record_thread(void* arg) {
                     
                     if (linx_websocket_send_audio((linx_protocol_t*)g_ws_protocol, packet)) {
                         total_sent += packet->payload_size;
-                        printf("🎵 发送音频数据: %zu 字节 (总计: %zu 字节)\n", packet->payload_size, total_sent);
+                        //printf("🎵 发送音频数据: %zu 字节 (总计: %zu 字节)\n", packet->payload_size, total_sent);
                     } else {
                         printf("❌ 发送音频数据失败\n");
                     }

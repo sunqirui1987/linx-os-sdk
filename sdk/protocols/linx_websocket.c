@@ -558,8 +558,8 @@ bool linx_websocket_send_audio(linx_protocol_t* protocol, linx_audio_stream_pack
         LOG_ERROR("Invalid websocket protocol or connection state");
         return false;
     }
-    LOG_DEBUG("Sending audio packet - Sample Rate: %d, Frame Duration: %d, Timestamp: %u, Payload Size: %zu, Version: %d", 
-              packet->sample_rate, packet->frame_duration, packet->timestamp, packet->payload_size, ws_protocol->version);
+    // LOG_DEBUG("Sending audio packet - Sample Rate: %d, Frame Duration: %d, Timestamp: %u, Payload Size: %zu, Version: %d", 
+    //           packet->sample_rate, packet->frame_duration, packet->timestamp, packet->payload_size, ws_protocol->version);
     
     if (ws_protocol->version == 2) {
 
@@ -582,11 +582,7 @@ bool linx_websocket_send_audio(linx_protocol_t* protocol, linx_audio_stream_pack
         int send_result = mg_ws_send(ws_protocol->conn, buffer, total_size, WEBSOCKET_OP_BINARY);
         free(buffer);
         
-        if (send_result > 0) {
-            LOG_DEBUG("WebSocket send successful: %zu bytes (protocol v2, total size: %zu)", packet->payload_size, total_size);
-        } else {
-            LOG_ERROR("WebSocket send failed: mg_ws_send returned %d (protocol v2)", send_result);
-        }
+
         
         return send_result > 0;
     } else if (ws_protocol->version == 3) {
@@ -607,22 +603,14 @@ bool linx_websocket_send_audio(linx_protocol_t* protocol, linx_audio_stream_pack
         int send_result = mg_ws_send(ws_protocol->conn, buffer, total_size, WEBSOCKET_OP_BINARY);
         free(buffer);
         
-        if (send_result > 0) {
-            LOG_DEBUG("WebSocket send successful: %zu bytes (protocol v3, total size: %zu)", packet->payload_size, total_size);
-        } else {
-            LOG_ERROR("WebSocket send failed: mg_ws_send returned %d (protocol v3)", send_result);
-        }
+      
         
         return send_result > 0;
     } else {
         /* Fallback for unsupported protocol versions - send raw payload */
         int send_result = mg_ws_send(ws_protocol->conn, packet->payload, packet->payload_size, WEBSOCKET_OP_BINARY);
         
-        if (send_result > 0) {
-            LOG_DEBUG("WebSocket send successful: %zu bytes (raw data, protocol v%d)", packet->payload_size, ws_protocol->version);
-        } else {
-            LOG_ERROR("WebSocket send failed: mg_ws_send returned %d (raw data, protocol v%d)", send_result, ws_protocol->version);
-        }
+
         
         return send_result > 0;
     }

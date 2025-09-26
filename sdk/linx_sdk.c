@@ -323,7 +323,7 @@ LinxSdkError linx_sdk_send_audio(LinxSdk* sdk, const uint8_t* data, size_t size)
         return LINX_SDK_ERROR_NETWORK;
     }
     
-    LOG_DEBUG("发送音频数据: %zu 字节", size);
+    //LOG_DEBUG("发送音频数据: %zu 字节", size);
     
     // 创建音频数据包并发送
     linx_audio_stream_packet_t packet = {

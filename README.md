@@ -24,19 +24,35 @@ LinX OS SDK 是一个跨平台的智能语音交互软件开发工具包，专�
 - **🖥️ 跨平台兼容**: 支持 macOS、Linux、ESP32、全志芯片等多个平台
 - **📦 模块化设计**: 采用模块化架构，便于扩展和维护
 - **🔒 线程安全**: 多线程安全设计，支持并发操作
+- **⚙️ 统一构建系统**: 提供 menuconfig 配置界面，一键选择平台和工具链
+- **🏗️ 智能编译**: 自动检测工具链，支持 SDK → Board → Examples 分层编译
 
 
 
 ### 🏗️ 架构概览
 
 ```
-LinX OS SDK
-├── 🎵 Audio Module        # 音频录制和播放
-├── 🎛️ Codecs Module       # 音频编解码 (Opus)
-├── 🌐 Protocols Module    # WebSocket 通信协议
-├── 🔧 MCP Module          # Model Context Protocol
-├── 📝 Log Module          # 日志系统
-└── 📊 JSON Module         # JSON 数据处理
+LinX OS SDK 分层架构
+├── ⚙️ 构建配置层 (Build Configuration)
+│   ├── menuconfig 配置界面
+│   ├── 平台和工具链选择
+│   └── 预设配置管理
+├── 🏗️ SDK 核心层 (Core SDK)
+│   ├── 🎵 Audio Module        # 音频录制和播放
+│   ├── 🎛️ Codecs Module       # 音频编解码 (Opus)
+│   ├── 🌐 Protocols Module    # WebSocket 通信协议
+│   ├── 🔧 MCP Module          # Model Context Protocol
+│   ├── 📝 Log Module          # 日志系统
+│   └── 📊 JSON Module         # JSON 数据处理
+├── 🔌 Board 适配层 (Board Adaptation)
+│   ├── macOS 开发板适配
+│   ├── 全志 AWOL 板适配
+│   ├── ESP32 开发板适配
+│   └── 自定义板级支持
+└── 📱 应用示例层 (Examples & Apps)
+    ├── 基础功能演示
+    ├── 平台特定示例
+    └── 完整应用程序
 ```
 
 ## 🚀 快速开始
@@ -96,151 +112,401 @@ git clone https://github.com/sunqirui1987/linx-os-sdk.git
 cd linx-os-sdk
 ```
 
-#### 2. 构建 SDK
+#### 2. 配置构建选项 (menuconfig)
+
+LinX OS SDK 提供了统一的配置界面，让您可以轻松选择目标平台、工具链和编译选项：
+
 ```bash
-cd sdk
-chmod +x run.sh
-export RISCV32_TOOLCHAIN_PATH="/home/sqr-ubuntu/nds32le-linux-musl-v5d" && ./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake 
+# 启动配置界面
+make menuconfig
 ```
 
-构建脚本会自动：
-- 下载并编译第三方依赖 (Mongoose, Opus)
-- 构建所有 SDK 模块
-- 生成静态库和头文件
-- 安装到 `sdk/build/install` 目录
+配置界面包含以下选项：
 
-#### 3. 构建演示程序
+```
+┌─────────────────── LinX OS SDK Configuration ───────────────────┐
+│                                                                  │
+│ Target Platform Selection                                        │
+│   ● Native (Host Platform)                                      │
+│   ○ ARM Linux (Embedded)                                        │
+│   ○ RISC-V (32-bit)                                            │
+│   ○ RISC-V (64-bit)                                            │
+│   ○ ESP32 (IoT Platform)                                        │
+│   ○ Allwinner A64/H5/H6 (ARM64)                                │
+│   ○ Allwinner H3/H2+ (ARM32)                                   │
+│   ○ Allwinner V821 (RISC-V)                                    │
+│                                                                  │
+│ Board Platform Selection                                         │
+│   ● Generic                                                     │
+│   ○ macOS Development Board                                     │
+│   ○ Allwinner AWOL Board                                       │
+│   ○ ESP32 DevKit                                               │
+│   ○ Custom Board                                               │
+│                                                                  │
+│ Toolchain Configuration                                          │
+│   Toolchain Path: [/opt/toolchain]                             │
+│   Sysroot Path:   [/opt/sysroot]                               │
+│   Custom CFLAGS:  [-O2 -g]                                     │
+│                                                                  │
+│ Build Options                                                    │
+│   [*] Enable Debug Build                                        │
+│   [*] Build Examples                                            │
+│   [*] Build Tests                                               │
+│   [ ] Enable Static Linking                                     │
+│                                                                  │
+│ Audio Configuration                                              │
+│   [*] Enable Opus Codec                                         │
+│   [*] Enable PortAudio                                          │
+│   Sample Rate: [16000]                                          │
+│                                                                  │
+│ Network Configuration                                            │
+│   [*] Enable WebSocket Support                                  │
+│   [*] Enable SSL/TLS                                            │
+│   Default Server: [ws://localhost:8080/v1/ws/]                  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+#### 3. 一键构建
+
+配置完成后，使用统一的构建命令：
+
 ```bash
-cd ../demo/mac
-mkdir build && cd build
-cmake ..
-make
+# 构建整个项目 (SDK + Board + Examples)
+make all
+
+# 或者分步构建
+make sdk          # 仅构建 SDK
+make board        # 构建板级支持
+make examples     # 构建示例程序
+```
+
+构建系统会自动：
+- 根据配置选择合适的工具链
+- 下载并编译第三方依赖 (Mongoose, Opus)
+- 构建 SDK 核心模块
+- 编译板级适配代码
+- 生成静态库和头文件
+- 构建示例程序和测试用例
+- 安装到 `build/install` 目录
+
+#### 4. 快速配置预设
+
+为了方便使用，我们提供了常用平台的预设配置：
+
+```bash
+# 使用预设配置
+make config-native      # 本地开发配置
+make config-riscv32     # RISC-V 32位配置
+make config-esp32       # ESP32 配置
+make config-allwinner   # 全志芯片配置
+
+# 查看所有可用预设
+make list-configs
+```
+
+#### 5. 高级构建选项
+
+```bash
+# 清理构建文件
+make clean
+
+# 完全清理 (包括配置)
+make distclean
+
+# 仅重新配置
+make reconfig
+
+# 显示构建信息
+make info
+
+# 并行构建 (使用多核)
+make -j$(nproc)
+
+# 详细构建日志
+make VERBOSE=1
 ```
 
 ### 🎯 运行演示
 
+构建完成后，可以运行相应平台的演示程序：
+
 ```bash
-# 运行演示程序
-./linx_demo
+# 运行演示程序 (根据配置的平台自动选择)
+make run
+
+# 或者直接运行可执行文件
+./build/examples/linx_demo
 
 # 指定服务器地址
-./linx_demo -s ws://your-server.com/v1/ws/
+./build/examples/linx_demo -s ws://your-server.com/v1/ws/
 
 # 查看帮助
-./linx_demo --help
+./build/examples/linx_demo --help
+```
+
+#### 平台特定运行方式
+
+##### macOS/Linux 平台
+```bash
+# 直接运行
+./build/examples/linx_demo
+
+# 使用调试模式
+./build/examples/linx_demo --debug --log-level=debug
+```
+
+##### ESP32 平台
+```bash
+# 烧录到设备
+make flash
+
+# 监控串口输出
+make monitor
+
+# 烧录并监控
+make flash monitor
+```
+
+##### 全志平台
+```bash
+# 复制到目标设备
+scp build/examples/linx_demo root@target-device:/usr/bin/
+
+# 在目标设备上运行
+ssh root@target-device
+/usr/bin/linx_demo --config /etc/linx/config.json
 ```
 
 ## 🔧 编译工具链集成
 
-LinX OS SDK 提供了完整的跨平台编译工具链支持，通过 CMake 工具链文件实现不同目标平台的编译。SDK 支持多种架构和操作系统，包括嵌入式设备和桌面系统。
+LinX OS SDK 提供了完整的跨平台编译工具链支持，通过统一的 menuconfig 配置界面和自动化构建系统，大大简化了跨平台编译的复杂性。SDK 支持多种架构和操作系统，包括嵌入式设备和桌面系统。
 
-### 🛠️ 工具链架构
+### 🛠️ 统一构建系统架构
 
 ```
-编译工具链系统
-├── 🖥️ 主机平台 (Host)
-│   ├── macOS (x86_64/arm64)
-│   ├── Linux (x86_64/arm64)
-│   └── Windows (x86_64)
-├── 🎯 目标平台 (Target)
-│   ├── ARM Linux (arm-linux-gnueabihf)
-│   ├── RISC-V (riscv32/riscv64)
-│   ├── ESP32 (xtensa-esp32)
-│   ├── 全志芯片 (aarch64-linux-gnu)
-│   └── x86_64 Linux (native)
-└── 🔗 交叉编译工具链
-    ├── GCC 工具链
-    ├── Clang/LLVM 工具链
-    └── 厂商专用工具链
+LinX OS SDK 构建系统
+├── 📋 配置层 (Configuration Layer)
+│   ├── menuconfig 界面配置
+│   ├── 预设配置文件
+│   └── 环境变量检测
+├── 🔧 工具链管理 (Toolchain Management)
+│   ├── 自动工具链检测
+│   ├── 工具链路径配置
+│   └── 交叉编译环境设置
+├── 🏗️ 构建引擎 (Build Engine)
+│   ├── SDK 核心编译
+│   ├── Board 平台适配
+│   └── 示例程序构建
+└── 📦 输出管理 (Output Management)
+    ├── 库文件生成
+    ├── 头文件安装
+    └── 示例程序打包
 ```
 
-### 📦 支持的工具链
+### 🎯 支持的目标平台
 
-| 平台 | 架构 | 工具链 | CMake 工具链文件 | 说明 |
-|------|------|--------|------------------|------|
-| **Linux x86_64** | x86_64 | GCC/Clang | `native-linux.cmake` | 本地编译 |
-| **ARM Linux** | armv7/armv8 | arm-linux-gnueabihf | `arm-linux-gnueabihf.cmake` | ARM 嵌入式 Linux |
-| **RISC-V** | riscv32/riscv64 | riscv-linux-musl | `riscv32-linux-musl.cmake` | RISC-V 架构 |
-| **ESP32** | xtensa | esp-idf | `esp32.cmake` | ESP32 物联网平台 |
-| **全志芯片** | aarch64 | aarch64-linux-gnu | `allwinner-aarch64.cmake` | 全志 ARM64 芯片 |
-| **全志芯片** | armv7 | arm-linux-gnueabihf | `allwinner-armv7.cmake` | 全志 ARM32 芯片 |
-| **全志V821** | riscv32 | nds32le-linux-musl-v5d | `riscv32-linux-musl.cmake` | 全志V821 RISC-V 无线SoC |
+| 平台类别 | 目标平台 | 架构 | 工具链 | menuconfig 选项 |
+|---------|---------|------|--------|----------------|
+| **桌面平台** | Native Host | x86_64/arm64 | GCC/Clang | `Native (Host Platform)` |
+| **ARM 嵌入式** | ARM Linux | armv7/armv8 | arm-linux-gnueabihf | `ARM Linux (Embedded)` |
+| **RISC-V** | RISC-V 32位 | riscv32 | riscv32-linux-musl | `RISC-V (32-bit)` |
+| **RISC-V** | RISC-V 64位 | riscv64 | riscv64-linux-musl | `RISC-V (64-bit)` |
+| **物联网** | ESP32 | xtensa | esp-idf | `ESP32 (IoT Platform)` |
+| **全志芯片** | A64/H5/H6 | aarch64 | aarch64-linux-gnu | `Allwinner A64/H5/H6 (ARM64)` |
+| **全志芯片** | H3/H2+ | armv7 | arm-linux-gnueabihf | `Allwinner H3/H2+ (ARM32)` |
+| **全志芯片** | V821 | riscv32 | nds32le-linux-musl-v5d | `Allwinner V821 (RISC-V)` |
 
-### 🔧 工具链配置
+### 🔧 工具链自动配置
 
-#### 1. RISC-V 工具链配置
+通过 menuconfig 配置界面，工具链配置变得非常简单。系统会自动检测和配置工具链，无需手动设置复杂的环境变量。
+
+#### 1. 自动工具链检测
 
 ```bash
-# 设置 RISC-V 工具链路径
-export RISCV32_TOOLCHAIN_PATH="/opt/riscv32-linux-musl"
+# 启动配置界面
+make menuconfig
 
-# 编译 RISC-V 32位版本
-cd sdk
-./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
-
-# 编译 RISC-V 64位版本
-export RISCV64_TOOLCHAIN_PATH="/opt/riscv64-linux-musl"
-./run.sh --toolchain cmake/toolchains/riscv64-linux-musl.cmake
+# 系统会自动检测以下工具链：
+# ✓ 检测到 GCC 工具链: /usr/bin/gcc
+# ✓ 检测到 ARM 工具链: /opt/arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc
+# ✓ 检测到 RISC-V 工具链: /opt/riscv32/bin/riscv32-linux-musl-gcc
+# ✓ 检测到 ESP-IDF: /opt/esp-idf
 ```
 
-#### 2. 全志芯片工具链配置
+#### 2. 工具链路径配置
 
-```bash
-# 全志 A64/H5/H6 系列 (ARM64)
-export ALLWINNER_TOOLCHAIN_PATH="/opt/aarch64-linux-gnu"
-export ALLWINNER_SYSROOT="/opt/allwinner-sysroot"
+如果系统未自动检测到工具链，可以在 menuconfig 中手动指定：
 
-# 编译全志 ARM64 版本
-./run.sh --toolchain cmake/toolchains/allwinner-aarch64.cmake
-
-# 全志 H3/H2+ 系列 (ARM32)
-export ALLWINNER_ARM32_TOOLCHAIN_PATH="/opt/arm-linux-gnueabihf"
-./run.sh --toolchain cmake/toolchains/allwinner-armv7.cmake
+```
+Toolchain Configuration
+├── Toolchain Path: [/opt/your-toolchain]
+├── Sysroot Path:   [/opt/your-sysroot]
+├── Custom CFLAGS:  [-O2 -g -march=native]
+└── Custom LDFLAGS: [-static]
 ```
 
-#### 3. ESP32 工具链配置
+#### 3. 常用工具链安装
 
+##### RISC-V 工具链
 ```bash
-# 设置 ESP-IDF 环境
-source $IDF_PATH/export.sh
+# Ubuntu/Debian
+sudo apt install gcc-riscv64-linux-gnu
 
-# 编译 ESP32 版本
-./run.sh --toolchain cmake/toolchains/esp32.cmake
+# 或下载预编译工具链
+wget https://github.com/riscv/riscv-gnu-toolchain/releases/download/...
+tar -xf riscv32-linux-musl.tar.xz -C /opt/
 ```
 
-#### 4. ARM Linux 工具链配置
-
+##### ARM 工具链
 ```bash
-# ARM 硬浮点工具链
-export ARM_TOOLCHAIN_PATH="/opt/arm-linux-gnueabihf"
-./run.sh --toolchain cmake/toolchains/arm-linux-gnueabihf.cmake
+# Ubuntu/Debian
+sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 
-# ARM 软浮点工具链
-export ARM_TOOLCHAIN_PATH="/opt/arm-linux-gnueabi"
-./run.sh --toolchain cmake/toolchains/arm-linux-gnueabi.cmake
+# CentOS/RHEL
+sudo yum install gcc-arm-linux-gnu gcc-aarch64-linux-gnu
 ```
 
-#### 5. 全志V821 RISC-V 工具链配置
-
+##### 全志V821专用工具链
 ```bash
-# 下载并解压工具链
+# 下载全志V821工具链
 # 链接: https://pan.baidu.com/s/1f-xLwrOjHntsW4LyO1KKWw 提取码: 5ser
-tar -xf nds32le-linux-musl-v5d.tar.xz
+wget -O nds32le-linux-musl-v5d.tar.xz "https://..."
+tar -xf nds32le-linux-musl-v5d.tar.xz -C /opt/
 
-# 设置全志V821工具链路径
-export ALLWINNER_V821_TOOLCHAIN_PATH="/path/to/nds32le-linux-musl-v5d"
-export PATH="$ALLWINNER_V821_TOOLCHAIN_PATH/bin:$PATH"
+# 在 menuconfig 中设置路径为: /opt/nds32le-linux-musl-v5d
+```
 
-# 验证工具链
-riscv32-linux-musl-gcc --version
+##### ESP32 工具链
+```bash
+# 安装 ESP-IDF
+git clone --recursive https://github.com/espressif/esp-idf.git
+cd esp-idf
+./install.sh
+source export.sh
 
-# 编译全志V821版本
-cd sdk
-./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
+# menuconfig 会自动检测 ESP-IDF 环境
+```
 
-# 使用特定编译选项
-export V821_CFLAGS="-g -ggdb -Wall -O3 -march=rv32imfdcxandes -mabi=ilp32d -mcmodel=medany"
-./run.sh --toolchain cmake/toolchains/riscv32-linux-musl.cmake
+### 🏗️ Board 平台配置
+
+LinX OS SDK 支持多种板级平台，每个平台都有特定的硬件适配代码和配置。通过 menuconfig 可以轻松选择和配置目标板级平台。
+
+#### 📋 支持的 Board 平台
+
+| Board 平台 | 描述 | 支持芯片 | 特性 |
+|-----------|------|---------|------|
+| **Generic** | 通用平台 | 所有支持的芯片 | 基础功能，适用于大多数场景 |
+| **macOS Development Board** | macOS 开发板 | x86_64/arm64 | 完整开发环境，支持所有功能 |
+| **Allwinner AWOL Board** | 全志 AWOL 开发板 | V821/A64/H5/H6 | 全志专用硬件适配 |
+| **ESP32 DevKit** | ESP32 开发套件 | ESP32/ESP32-S3 | 物联网功能，低功耗设计 |
+| **Custom Board** | 自定义板级 | 用户定义 | 支持用户自定义硬件配置 |
+
+#### 🔧 Board 平台选择
+
+在 menuconfig 中选择 Board 平台：
+
+```
+Board Platform Selection
+├── ● Generic                    # 通用平台，适用于大多数场景
+├── ○ macOS Development Board    # macOS 开发环境
+├── ○ Allwinner AWOL Board      # 全志 AWOL 开发板
+├── ○ ESP32 DevKit              # ESP32 开发套件
+└── ○ Custom Board              # 自定义板级平台
+```
+
+#### 📦 Board 特定配置
+
+每个 Board 平台都有特定的配置选项：
+
+##### macOS Development Board
+```
+macOS Board Configuration
+├── Audio Backend: [PortAudio]
+├── Network Interface: [WiFi/Ethernet]
+├── Debug Interface: [USB/Serial]
+└── Power Management: [Disabled]
+```
+
+##### Allwinner AWOL Board
+```
+Allwinner AWOL Board Configuration
+├── Audio Codec: [AC108/ES8388]
+├── Display Output: [HDMI/MIPI-DSI]
+├── Network Interface: [Ethernet/WiFi]
+├── Storage: [eMMC/SD Card]
+└── GPIO Configuration: [Custom]
+```
+
+##### ESP32 DevKit
+```
+ESP32 DevKit Configuration
+├── Audio Codec: [I2S/PDM]
+├── WiFi Configuration: [STA/AP Mode]
+├── Bluetooth: [Classic/BLE]
+├── Power Management: [Deep Sleep]
+└── OTA Update: [Enabled]
+```
+
+#### 🏗️ Board 编译流程
+
+Board 平台的编译是在 SDK 编译完成后进行的：
+
+```bash
+# 1. 配置 Board 平台
+make menuconfig
+# 选择目标 Board 平台
+
+# 2. 编译 SDK (如果尚未编译)
+make sdk
+
+# 3. 编译 Board 适配代码
+make board
+
+# 4. 编译示例程序 (可选)
+make examples
+
+# 或者一键编译所有组件
+make all
+```
+
+#### 📁 Board 目录结构
+
+```
+board/
+├── mac/                        # macOS 开发板
+│   ├── CMakeLists.txt          # 构建配置
+│   ├── common/                 # 通用代码
+│   │   └── audio/              # 音频适配
+│   └── build/                  # 构建输出
+├── awol/                       # 全志 AWOL 开发板
+│   ├── common/                 # 通用代码
+│   │   └── audio/              # 音频适配
+│   └── v821/                   # V821 特定代码
+└── esp32/                      # ESP32 开发板 (待添加)
+    ├── main/                   # 主程序
+    ├── components/             # 组件
+    └── sdkconfig               # ESP-IDF 配置
+```
+
+#### 🔧 自定义 Board 平台
+
+如果需要支持新的硬件平台，可以创建自定义 Board：
+
+```bash
+# 1. 创建 Board 目录
+mkdir -p board/my-custom-board/{common,specific}
+
+# 2. 复制模板文件
+cp board/mac/CMakeLists.txt board/my-custom-board/
+cp -r board/mac/common/* board/my-custom-board/common/
+
+# 3. 修改适配代码
+# 编辑 board/my-custom-board/common/audio/ 中的音频适配代码
+# 根据硬件特性修改 CMakeLists.txt
+
+# 4. 在 menuconfig 中添加选项
+# 编辑构建系统配置文件，添加新的 Board 选项
 ```
 
 ### 🏗️ 自定义工具链

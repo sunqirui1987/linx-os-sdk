@@ -275,10 +275,17 @@ player_error_t linx_player_feed_data(linx_player_t* player, const uint8_t* data,
         return PLAYER_ERROR_NOT_INITIALIZED;
     }
     
+    LOG_DEBUG("📥 接收音频数据: %zu 字节", size);
+    
     pthread_mutex_lock(&player->buffer_mutex);
     
+    size_t available_space = circular_buffer_available_space(player);
+    float usage_before = (float)player->buffer_count / (float)player->buffer_capacity * 100.0f;
+    
     // 检查缓冲区是否有足够空间
-    if (circular_buffer_available_space(player) < size) {
+    if (available_space < size) {
+        LOG_WARN("⚠️ 缓冲区空间不足: 需要 %zu 字节，可用 %zu 字节 (使用率: %.1f%%)", 
+                size, available_space, usage_before);
         pthread_mutex_unlock(&player->buffer_mutex);
         return PLAYER_ERROR_BUFFER_FULL;
     }
@@ -286,12 +293,16 @@ player_error_t linx_player_feed_data(linx_player_t* player, const uint8_t* data,
     // 写入数据到环形缓冲区
     size_t written = circular_buffer_write(player, data, size);
     
+    float usage_after = (float)player->buffer_count / (float)player->buffer_capacity * 100.0f;
+    LOG_DEBUG("✅ 数据写入缓冲区: %zu 字节，使用率: %.1f%% -> %.1f%%", 
+             written, usage_before, usage_after);
+    
     // 通知播放线程有新数据
     pthread_cond_signal(&player->buffer_cond);
     pthread_mutex_unlock(&player->buffer_mutex);
     
     if (written != size) {
-        LOG_WARN("Only wrote %zu of %zu bytes to buffer", written, size);
+        LOG_WARN("⚠️ 部分写入: 写入 %zu / %zu 字节", written, size);
     }
     
     return PLAYER_SUCCESS;
@@ -459,13 +470,24 @@ static void* playback_thread_func(void* arg) {
     linx_player_t* player = (linx_player_t*)arg;
     uint8_t encoded_buffer[DECODE_BUFFER_SIZE];
     int16_t decoded_buffer[DECODE_BUFFER_SIZE];
+    size_t buffer_monitor_counter = 0;  // 缓冲区监控计数器
     
-    LOG_INFO("Playback thread started");
+    LOG_INFO("🎵 播放线程已启动");
     
     while (player->running) {
         pthread_mutex_lock(&player->state_mutex);
         player_state_t current_state = player->state;
         pthread_mutex_unlock(&player->state_mutex);
+        
+        // 每1000次循环打印一次缓冲区状态
+        buffer_monitor_counter++;
+        if (buffer_monitor_counter % 1000 == 0) {
+            pthread_mutex_lock(&player->buffer_mutex);
+            float usage = (float)player->buffer_count / (float)player->buffer_capacity * 100.0f;
+            LOG_INFO("📊 缓冲区状态: %zu/%zu 字节 (%.1f%% 使用率)", 
+                    player->buffer_count, player->buffer_capacity, usage);
+            pthread_mutex_unlock(&player->buffer_mutex);
+        }
         
         // 如果暂停，等待恢复
         if (current_state == PLAYER_STATE_PAUSED) {
@@ -486,6 +508,7 @@ static void* playback_thread_func(void* arg) {
         
         // 如果缓冲区为空，等待数据
         if (player->buffer_count == 0) {
+            LOG_DEBUG("播放缓冲区为空，等待数据...");
             pthread_cond_wait(&player->buffer_cond, &player->buffer_mutex);
             pthread_mutex_unlock(&player->buffer_mutex);
             continue;
@@ -495,6 +518,9 @@ static void* playback_thread_func(void* arg) {
         size_t to_read = (player->buffer_count < sizeof(encoded_buffer)) ? 
                         player->buffer_count : sizeof(encoded_buffer);
         size_t read_size = circular_buffer_read(player, encoded_buffer, to_read);
+        
+        LOG_DEBUG("从缓冲区读取 %zu 字节数据，缓冲区剩余: %zu 字节", 
+                 read_size, player->buffer_count);
         pthread_mutex_unlock(&player->buffer_mutex);
         
         if (read_size > 0) {
@@ -504,18 +530,28 @@ static void* playback_thread_func(void* arg) {
                                  decoded_buffer, sizeof(decoded_buffer)/sizeof(int16_t), 
                                  &decoded_size) == CODEC_SUCCESS) {
                 
+                LOG_DEBUG("解码成功: %zu 字节编码数据 -> %zu 个样本", read_size, decoded_size);
+                
                 // 播放解码后的音频
                 if (audio_interface_write(player->audio_interface, decoded_buffer, decoded_size) == 0) {
                     // 更新统计信息
                     pthread_mutex_lock(&player->state_mutex);
                     player->total_bytes_played += read_size;
                     player->total_frames_played++;
+                    
+                    // 每播放100帧打印一次统计信息
+                    if (player->total_frames_played % 100 == 0) {
+                        LOG_INFO("播放统计: 已播放 %zu 字节, %zu 帧", 
+                                player->total_bytes_played, player->total_frames_played);
+                    }
                     pthread_mutex_unlock(&player->state_mutex);
+                    
+                    LOG_DEBUG("音频数据写入成功: %zu 个样本", decoded_size);
                 } else {
-                    LOG_ERROR("Failed to write audio data");
+                    LOG_ERROR("✗ 音频数据写入失败");
                 }
             } else {
-                LOG_ERROR("Failed to decode audio data");
+                LOG_ERROR("✗ 音频解码失败: %zu 字节数据", read_size);
             }
         }
         
