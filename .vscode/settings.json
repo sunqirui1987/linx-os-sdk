@@ -57,6 +57,7 @@
         "opus_codec.h": "c",
         "mcp_server.h": "c",
         "audio_interface.h": "c",
-        "linx_protocol.h": "c"
+        "linx_protocol.h": "c",
+        "opus.h": "c"
     }
 }

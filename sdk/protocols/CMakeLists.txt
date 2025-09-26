@@ -4,8 +4,7 @@ cmake_minimum_required(VERSION 3.10)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
 
 # 查找 Mongoose 库
-find_package(Mongoose REQUIRED)
-message(STATUS "Mongoose library found: ${MONGOOSE_INCLUDE_DIRS}")
+set(MONGOOSE_INCLUDE_DIRS, ${CMAKE_CURRENT_SOURCE_DIR}/../mongoose/mongoose)
 
 # 协议库源文件
 set(PROTOCOLS_SOURCES

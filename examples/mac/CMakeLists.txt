@@ -35,13 +35,7 @@ if(NOT EXISTS ${SDK_INCLUDE_DIR})
     message(FATAL_ERROR "SDK include directory not found: ${SDK_INCLUDE_DIR}")
 endif()
 
-if(NOT EXISTS ${OPUS_INCLUDE_DIR})
-    message(FATAL_ERROR "Opus include directory not found: ${OPUS_INCLUDE_DIR}")
-endif()
 
-if(NOT EXISTS ${MONGOOSE_INCLUDE_DIR})
-    message(FATAL_ERROR "Mongoose include directory not found: ${MONGOOSE_INCLUDE_DIR}")
-endif()
 
 # 检查库文件目录是否存在
 if(NOT EXISTS ${SDK_LIB_DIR})
@@ -50,8 +44,6 @@ endif()
 
 # 添加头文件搜索路径
 include_directories(${SDK_INCLUDE_DIR})
-include_directories(${OPUS_INCLUDE_DIR})
-include_directories(${MONGOOSE_INCLUDE_DIR})
 
 # 添加可执行文件
 add_executable(linx_demo linx_demo.c)
@@ -60,8 +52,8 @@ add_executable(linx_demo linx_demo.c)
 target_link_libraries(linx_demo 
     ${SDK_LIB_DIR}/liblinx_sdk_static.a
     ${SDK_LIB_DIR}/liblinx_board_mac.a
-    ${MONGOOSE_LIB_DIR}/libmongoose.a
-    ${OPUS_LIB_DIR}/libopus.a
+    ${SDK_LIB_DIR}/libmongoose.a
+    ${SDK_LIB_DIR}/libopus.a
 )
 
 # 查找并链接系统依赖库
@@ -75,13 +67,7 @@ else()
     message(WARNING "PortAudio library not found, you may need to install it")
 endif()
 
-# 查找 Opus
-find_library(OPUS_LIBRARY opus)
-if(OPUS_LIBRARY)
-    target_link_libraries(linx_demo ${OPUS_LIBRARY})
-else()
-    message(WARNING "Opus library not found, you may need to install it")
-endif()
+
 
 # macOS 系统框架
 if(APPLE)

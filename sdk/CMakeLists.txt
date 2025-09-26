@@ -12,6 +12,25 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PlatformDetection.cmake)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 
+# copy files
+set(patch_dir "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patch/mongoose")
+set(mongoose_dir "${CMAKE_CURRENT_SOURCE_DIR}/third/mongoose")
+
+if(EXISTS "${patch_dir}")
+    message(STATUS "Copying mongoose patch files from ${patch_dir} to ${mongoose_dir}")
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${patch_dir}" "${mongoose_dir}"
+        RESULT_VARIABLE copy_result
+    )
+    if(NOT copy_result EQUAL 0)
+        message(FATAL_ERROR "Failed to copy mongoose patch files")
+    endif()
+endif()
+
+
+# Add third-party libraries
+add_subdirectory(third/mongoose)
+add_subdirectory(third/opus)
 
 # =============================================================================
 # Add subdirectories to build individual libraries
@@ -26,9 +45,7 @@ add_subdirectory(codecs)
 add_subdirectory(audio)
 add_subdirectory(play)
 
-# Add third-party libraries
-add_subdirectory(third/mongoose)
-add_subdirectory(third/opus)
+
 
 # =============================================================================
 # Create unified static library
