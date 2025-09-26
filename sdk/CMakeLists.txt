@@ -26,6 +26,10 @@ add_subdirectory(codecs)
 add_subdirectory(audio)
 add_subdirectory(play)
 
+# Add third-party libraries
+add_subdirectory(third/mongoose)
+add_subdirectory(third/opus)
+
 # =============================================================================
 # Create unified static library
 # =============================================================================
@@ -138,11 +142,25 @@ install(DIRECTORY play/
 
 # Install third-party libraries
 # Install mongoose library
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/third/mongoose/install/
-    DESTINATION third/mongoose
+install(TARGETS mongoose
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
 )
 
-# Install opus library  
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/third/opus/install/
-    DESTINATION third/opus
+# Install mongoose headers
+install(FILES third/mongoose/mongoose.h
+    DESTINATION include/third/mongoose
+)
+
+# Install opus library
+install(TARGETS opus
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+# Install opus headers
+install(FILES third/opus/include/opus.h third/opus/include/opus_multistream.h third/opus/include/opus_types.h third/opus/include/opus_defines.h
+    DESTINATION include/third/opus
 )
