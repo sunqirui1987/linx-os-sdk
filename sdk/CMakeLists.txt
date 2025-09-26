@@ -84,8 +84,9 @@ target_link_libraries(linx_sdk_static PRIVATE ${LINX_SDK_PLATFORM_LIBS})
 # Installation configuration
 # =============================================================================
 
-# Set installation directory to build/install
-set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install CACHE PATH "Installation directory" FORCE)
+# Set installation directory to project root/out/linx
+set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/../out/linx CACHE PATH "Installation directory" FORCE)
+message(STATUS "SDK installation directory: ${CMAKE_INSTALL_PREFIX}")
 
 # Install the static library
 install(TARGETS linx_sdk_static

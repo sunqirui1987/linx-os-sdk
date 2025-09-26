@@ -11,7 +11,7 @@ set(CMAKE_C_FLAGS_DEBUG "-g -O0")
 set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
 
 # 设置 SDK 路径
-set(SDK_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/build/install")
+set(SDK_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../out/linx")
 set(SDK_INCLUDE_DIR "${SDK_INSTALL_DIR}/include")
 set(SDK_LIB_DIR "${SDK_INSTALL_DIR}/lib")
 set(OPUS_INCLUDE_DIR "${SDK_INSTALL_DIR}/third/opus/include/opus")

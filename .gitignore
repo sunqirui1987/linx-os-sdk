@@ -8,3 +8,4 @@ sdk/play/test/build
 examples/build
 examples/mac/build
 board/mac/build
+out

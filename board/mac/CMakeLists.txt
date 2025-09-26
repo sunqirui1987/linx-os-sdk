@@ -16,6 +16,14 @@ endif()
 message(STATUS "Building Linx SDK for macOS platform ${CMAKE_CURRENT_SOURCE_DIR}")
 
 # =============================================================================
+# Installation Directory Configuration
+# =============================================================================
+
+# Set the installation base directory to project root/out/linx
+set(LINX_MAC_INSTALL_BASE "${CMAKE_CURRENT_SOURCE_DIR}/../../out/linx")
+message(STATUS "Mac board installation base directory: ${LINX_MAC_INSTALL_BASE}")
+
+# =============================================================================
 # Mac Platform Audio Sources
 # =============================================================================
 
@@ -214,23 +222,23 @@ target_compile_definitions(linx_board_mac
 # Install the static library
 install(TARGETS linx_board_mac
     EXPORT LinxBoardMacTargets
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-    PUBLIC_HEADER DESTINATION include/board/mac
+    ARCHIVE DESTINATION ${LINX_MAC_INSTALL_BASE}/lib
+    LIBRARY DESTINATION ${LINX_MAC_INSTALL_BASE}/lib
+    RUNTIME DESTINATION ${LINX_MAC_INSTALL_BASE}/bin
+    PUBLIC_HEADER DESTINATION ${LINX_MAC_INSTALL_BASE}/include/board/mac
 )
 
 # Install headers
 install(FILES 
     ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/portaudio_mac.h
-    DESTINATION include/board/mac/audio
+    DESTINATION ${LINX_MAC_INSTALL_BASE}/include/board/mac/audio
 )
 
 # Export targets for use by other projects
 install(EXPORT LinxBoardMacTargets
     FILE LinxBoardMacTargets.cmake
     NAMESPACE LinxSDK::
-    DESTINATION lib/cmake/LinxBoardMac
+    DESTINATION ${LINX_MAC_INSTALL_BASE}/lib/cmake/LinxBoardMac
 )
 
 # Create and install package config file
@@ -247,11 +255,11 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/LinxBoardMacConfig.cmake
 include(\"\${CMAKE_CURRENT_LIST_DIR}/LinxBoardMacTargets.cmake\")
 set(LinxBoardMac_FOUND TRUE)
 set(LinxBoardMac_LIBRARIES LinxSDK::linx_board_mac)
-set(LinxBoardMac_INCLUDE_DIRS \"\${CMAKE_CURRENT_LIST_DIR}/../../../include/board/mac\")
+set(LinxBoardMac_INCLUDE_DIRS \"\${CMAKE_CURRENT_LIST_DIR}/../../include/board/mac\")
 ")
 
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/LinxBoardMacConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/LinxBoardMacConfigVersion.cmake
-    DESTINATION lib/cmake/LinxBoardMac
+    DESTINATION ${LINX_MAC_INSTALL_BASE}/lib/cmake/LinxBoardMac
 )
