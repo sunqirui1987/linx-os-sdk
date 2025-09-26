@@ -52,6 +52,11 @@
         "stdlib.h": "c",
         "portaudio_mac.h": "c",
         "audio_codec.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "print": "c",
+        "opus_codec.h": "c",
+        "mcp_server.h": "c",
+        "audio_interface.h": "c",
+        "linx_protocol.h": "c"
     }
 }

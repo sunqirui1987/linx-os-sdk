@@ -27,7 +27,7 @@
 #include "linx_sdk.h"
 #include "protocols/linx_protocol.h"
 #include "audio/audio_interface.h"
-#include "board/audio/portaudio_mac.h"
+#include "board/mac/audio/portaudio_mac.h"
 #include "codecs/audio_codec.h"
 #include "codecs/opus_codec.h"
 #include "mcp/mcp_server.h"

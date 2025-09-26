@@ -59,6 +59,7 @@ add_executable(linx_demo linx_demo.c)
 # 链接 SDK 静态库
 target_link_libraries(linx_demo 
     ${SDK_LIB_DIR}/liblinx_sdk_static.a
+    ${SDK_LIB_DIR}/liblinx_board_mac.a
     ${MONGOOSE_LIB_DIR}/libmongoose.a
     ${OPUS_LIB_DIR}/libopus.a
 )
