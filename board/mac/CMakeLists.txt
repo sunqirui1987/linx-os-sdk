@@ -6,10 +6,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 
-# Verify this is macOS platform
-if(NOT LINX_PLATFORM_NAME STREQUAL "macos")
-    message(FATAL_ERROR "This board configuration is only for macOS platform. Detected: ${LINX_PLATFORM_NAME}")
-endif()
+
 
 message(STATUS "Building Linx SDK for macOS platform ${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -28,10 +25,13 @@ message(STATUS "Mac board installation base directory: ${LINX_MAC_INSTALL_BASE}"
 # Mac platform specific audio sources
 set(MAC_AUDIO_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/portaudio_mac.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/camera/camera_mac.c
 )
 
 set(MAC_AUDIO_HEADERS
     common/audio/portaudio_mac.h
+
+    common/camera/camera_mac.h
 )
 
 # =============================================================================
@@ -110,6 +110,7 @@ set(MAC_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/common/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/third/mongoose
 )
 
 # Add PortAudio include directories if found

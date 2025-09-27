@@ -42,6 +42,7 @@ list(APPEND LIB_SRCS ${LVGL_DEMO_SRCS})
 set(LIB_PUBLIC_INC 
     ${MODULE_PATH}
     ${MODULE_PATH}/lvgl
+    ${MODULE_PATH}/port
     ${MODULE_PATH}/conf
 )
 

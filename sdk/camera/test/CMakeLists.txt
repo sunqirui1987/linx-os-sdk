@@ -18,34 +18,101 @@ list(APPEND CMAKE_MODULE_PATH ${SDK_DIR}/cmake)
 # This was causing the recursion error
 message(STATUS "Building test camera ${SDK_DIR} ")
 
-# Test executable
+# Test executable sources
 set(TEST_SOURCES
-    camera_test.c
+    camera_mac_explain.c
     ../camera_interface.c
-    ../camera_stub.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera/camera_mac.c
     ${CMAKE_CURRENT_LIST_DIR}/../../log/linx_log.c
-    ${CMAKE_CURRENT_LIST_DIR}/../../cjson/cjson.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../cjson/cJSON.c
 )
 
-# Create test executable
-add_executable(camera_test ${TEST_SOURCES})
+# GUI test executable sources
+set(GUI_TEST_SOURCES
+    camera_mac_explain_gui.c
+    ../camera_interface.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera/camera_mac.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../log/linx_log.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../cjson/cJSON.c
+)
+
+# Create test executables
+add_executable(camera_mac_explain ${TEST_SOURCES})
+add_executable(camera_mac_explain_gui ${GUI_TEST_SOURCES})
 
 # Include directories
-target_include_directories(camera_test PRIVATE
+target_include_directories(camera_mac_explain PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/..
     ${CMAKE_CURRENT_LIST_DIR}/../../
     ${CMAKE_CURRENT_LIST_DIR}/../../log
     ${CMAKE_CURRENT_LIST_DIR}/../../cjson
     ${CMAKE_CURRENT_LIST_DIR}/../../third/mongoose
-    ${LINX_CAMERA_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera
 )
 
-# Link libraries
-target_link_libraries(camera_test PRIVATE
-    cjson
-    ${SDK_LIB_DIR}/libmongoose.a
-    ${SDK_LIB_DIR}/libopus.a
+# Include directories for GUI
+target_include_directories(camera_mac_explain_gui PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/..
+    ${CMAKE_CURRENT_LIST_DIR}/../../
+    ${CMAKE_CURRENT_LIST_DIR}/../../log
+    ${CMAKE_CURRENT_LIST_DIR}/../../cjson
+    ${CMAKE_CURRENT_LIST_DIR}/../../third/mongoose
+    ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera
+    ${SDK_INCLUDE_DIR}/third/liblvgl
+    ${SDK_INCLUDE_DIR}/third/liblvgl/src
+    ${SDK_INCLUDE_DIR}/third/liblvgl/conf
 )
 
-# Install test binary
-install(TARGETS camera_test DESTINATION bin)
+# Find SDL2
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SDL2 REQUIRED sdl2)
+
+# Ensure we use the correct SDL2 library path for arm64 on macOS
+if(APPLE)
+    # Force use of Homebrew SDL2 on Apple Silicon
+    set(SDL2_LIBRARY_DIRS "/opt/homebrew/lib")
+    set(SDL2_INCLUDE_DIRS "/opt/homebrew/include/SDL2")
+    set(SDL2_LIBRARIES "-L/opt/homebrew/lib -lSDL2")
+endif()
+
+# Link libraries for macOS
+if(APPLE)
+    target_link_libraries(camera_mac_explain PRIVATE
+        ${SDK_LIB_DIR}/libmongoose.a
+        "-framework Foundation"
+        "-framework CoreGraphics"
+        "-framework CoreFoundation"
+        "-framework ImageIO"
+    )
+    
+    target_link_libraries(camera_mac_explain_gui PRIVATE
+        ${SDK_LIB_DIR}/libmongoose.a
+        ${SDK_LIB_DIR}/libv9.a
+        ${SDL2_LIBRARIES}
+        "-framework Foundation"
+        "-framework CoreGraphics"
+        "-framework CoreFoundation"
+        "-framework ImageIO"
+        "-framework Cocoa"
+        "-framework OpenGL"
+    )
+    
+    target_include_directories(camera_mac_explain_gui PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_compile_options(camera_mac_explain_gui PRIVATE ${SDL2_CFLAGS_OTHER})
+else()
+    target_link_libraries(camera_mac_explain PRIVATE
+        ${SDK_LIB_DIR}/libmongoose.a
+    )
+    
+    target_link_libraries(camera_mac_explain_gui PRIVATE
+        ${SDK_LIB_DIR}/libmongoose.a
+        ${SDK_LIB_DIR}/libv9.a
+        ${SDL2_LIBRARIES}
+    )
+    
+    target_include_directories(camera_mac_explain_gui PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_compile_options(camera_mac_explain_gui PRIVATE ${SDL2_CFLAGS_OTHER})
+endif()
+
+# Install test binaries
+install(TARGETS camera_mac_explain camera_mac_explain_gui DESTINATION bin)

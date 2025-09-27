@@ -58,6 +58,7 @@
         "mcp_server.h": "c",
         "audio_interface.h": "c",
         "linx_protocol.h": "c",
-        "opus.h": "c"
+        "opus.h": "c",
+        "camera_mac.h": "c"
     }
 }
