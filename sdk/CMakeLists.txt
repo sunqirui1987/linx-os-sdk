@@ -29,6 +29,7 @@ endif()
 # Add third-party libraries
 add_subdirectory(third/mongoose)
 add_subdirectory(third/opus)
+add_subdirectory(third/liblvgl)
 
 # =============================================================================
 # Add subdirectories to build individual libraries
@@ -179,4 +180,25 @@ install(TARGETS opus
 # Install opus headers
 install(FILES third/opus/include/opus.h third/opus/include/opus_multistream.h third/opus/include/opus_types.h third/opus/include/opus_defines.h
     DESTINATION include/third/opus
+)
+
+# Install lvgl library
+install(TARGETS v9
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+# Install lvgl headers
+install(FILES third/liblvgl/v9/lvgl/lvgl.h
+    DESTINATION include/third/liblvgl
+)
+
+install(DIRECTORY third/liblvgl/v9/lvgl/src/
+    DESTINATION include/third/liblvgl/src
+    FILES_MATCHING PATTERN "*.h"
+)
+
+install(FILES third/liblvgl/v9/conf/lv_conf.h
+    DESTINATION include/third/liblvgl/conf
 )
