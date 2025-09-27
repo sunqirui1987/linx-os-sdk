@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # LINX SDK Build Script
-# This script clones and builds third-party dependencies (mongoose, opus) and builds the main project
+# This script clones and builds third-party dependencies (mongoose, opus, lvgl) and builds the main project
 # Usage: ./run.sh [--toolchain <toolchain_file>] [--help]
 #   --toolchain <file>  : Use specified CMake toolchain file for cross-compilation
 #   --help             : Show this help message
@@ -162,6 +162,39 @@ copy_mongoose() {
     
 }
 
+# Function to setup LVGL
+copy_lvgl() {
+    print_info "Setting up LVGL..."
+    local lvgl_dir="${THIRD_DIR}/lvgl"
+    local patch_dir="${CMAKE_DIR}/patch/lvgl"
+    
+    if [ ! -d "${lvgl_dir}" ]; then
+        print_error "LVGL directory not found"
+        exit 1
+    fi
+    
+    # Check if main LVGL files exist
+    if [ ! -f "${lvgl_dir}/lvgl.h" ] || [ ! -d "${lvgl_dir}/src" ]; then
+        print_error "LVGL source files not found"
+        exit 1
+    fi
+    
+    # Copy patch files to LVGL directory if they exist
+    if [ -d "${patch_dir}" ]; then
+        print_info "Copying LVGL patch files from ${patch_dir}..."
+        cp -r "${patch_dir}"/* "${lvgl_dir}/" || {
+            print_error "Failed to copy LVGL patch files"
+            exit 1
+        }
+        print_success "LVGL patch files copied successfully"
+    else
+        print_info "No LVGL patch directory found: ${patch_dir} (this is optional)"
+    fi
+    
+    cd "${lvgl_dir}"
+    print_success "LVGL setup completed"
+}
+
 # Main execution flow
 main() {
 
@@ -175,8 +208,11 @@ main() {
     # Build dependencies
     print_info "=== Step 2: Building Dependencies ==="
     copy_mongoose
+    copy_lvgl
   
     print_success "=== LINX SDK Build Process Completed Successfully ==="
     print_info "Build artifacts are located in: ${SCRIPT_DIR}/build"
 }
+
+main
 
