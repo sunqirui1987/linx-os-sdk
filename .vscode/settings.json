@@ -60,6 +60,9 @@
         "linx_protocol.h": "c",
         "opus.h": "c",
         "camera_mac.h": "c",
-        "mongoose.h": "c"
+        "mongoose.h": "c",
+        "ostream": "c",
+        "version": "c",
+        "cstdio": "c"
     }
 }

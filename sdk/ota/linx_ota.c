@@ -14,10 +14,6 @@
 
 #define OTA_TAG "LINX_OTA"
 
-// Define LINX log macros
-#define LINX_LOGE(tag, fmt, ...) LOG_ERROR("[%s] " fmt, tag, ##__VA_ARGS__)
-#define LINX_LOGW(tag, fmt, ...) LOG_WARN("[%s] " fmt, tag, ##__VA_ARGS__)
-#define LINX_LOGI(tag, fmt, ...) LOG_INFO("[%s] " fmt, tag, ##__VA_ARGS__)
 
 // OTA context structure
 typedef struct {

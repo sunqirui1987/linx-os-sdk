@@ -29,6 +29,7 @@ endif()
 # Add third-party libraries
 add_subdirectory(third/mongoose)
 add_subdirectory(third/opus)
+add_subdirectory(third/fonts)
 add_subdirectory(third/liblvgl)
 
 # =============================================================================
@@ -180,6 +181,19 @@ install(TARGETS opus
 # Install opus headers
 install(FILES third/opus/include/opus.h third/opus/include/opus_multistream.h third/opus/include/opus_types.h third/opus/include/opus_defines.h
     DESTINATION include/third/opus
+)
+
+# Install fonts library
+install(TARGETS fonts
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+# Install fonts headers
+install(DIRECTORY third/fonts/include/
+    DESTINATION include/third/fonts
+    FILES_MATCHING PATTERN "*.h"
 )
 
 # Install lvgl library
