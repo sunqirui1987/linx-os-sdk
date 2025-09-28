@@ -12,3 +12,5 @@ out
 sdk/ota/test/build
 sdk/camera/test/build
 bak
+sdk/http/test/build
+*.o

@@ -59,6 +59,7 @@
         "audio_interface.h": "c",
         "linx_protocol.h": "c",
         "opus.h": "c",
-        "camera_mac.h": "c"
+        "camera_mac.h": "c",
+        "mongoose.h": "c"
     }
 }

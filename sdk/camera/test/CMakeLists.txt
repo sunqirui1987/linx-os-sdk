@@ -22,23 +22,12 @@ message(STATUS "Building test camera ${SDK_DIR} ")
 set(TEST_SOURCES
     camera_mac_explain.c
     ../camera_interface.c
-    ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera/camera_mac.c
-    ${CMAKE_CURRENT_LIST_DIR}/../../log/linx_log.c
-    ${CMAKE_CURRENT_LIST_DIR}/../../cjson/cJSON.c
-)
-
-# GUI test executable sources
-set(GUI_TEST_SOURCES
-    camera_mac_explain_gui.c
-    ../camera_interface.c
-    ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera/camera_mac.c
     ${CMAKE_CURRENT_LIST_DIR}/../../log/linx_log.c
     ${CMAKE_CURRENT_LIST_DIR}/../../cjson/cJSON.c
 )
 
 # Create test executables
 add_executable(camera_mac_explain ${TEST_SOURCES})
-add_executable(camera_mac_explain_gui ${GUI_TEST_SOURCES})
 
 # Include directories
 target_include_directories(camera_mac_explain PRIVATE
@@ -50,18 +39,6 @@ target_include_directories(camera_mac_explain PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera
 )
 
-# Include directories for GUI
-target_include_directories(camera_mac_explain_gui PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/..
-    ${CMAKE_CURRENT_LIST_DIR}/../../
-    ${CMAKE_CURRENT_LIST_DIR}/../../log
-    ${CMAKE_CURRENT_LIST_DIR}/../../cjson
-    ${CMAKE_CURRENT_LIST_DIR}/../../third/mongoose
-    ${CMAKE_CURRENT_LIST_DIR}/../../../board/mac/common/camera
-    ${SDK_INCLUDE_DIR}/third/liblvgl
-    ${SDK_INCLUDE_DIR}/third/liblvgl/src
-    ${SDK_INCLUDE_DIR}/third/liblvgl/conf
-)
 
 # Find SDL2
 find_package(PkgConfig REQUIRED)
@@ -85,34 +62,14 @@ if(APPLE)
         "-framework ImageIO"
     )
     
-    target_link_libraries(camera_mac_explain_gui PRIVATE
-        ${SDK_LIB_DIR}/libmongoose.a
-        ${SDK_LIB_DIR}/libv9.a
-        ${SDL2_LIBRARIES}
-        "-framework Foundation"
-        "-framework CoreGraphics"
-        "-framework CoreFoundation"
-        "-framework ImageIO"
-        "-framework Cocoa"
-        "-framework OpenGL"
-    )
-    
-    target_include_directories(camera_mac_explain_gui PRIVATE ${SDL2_INCLUDE_DIRS})
-    target_compile_options(camera_mac_explain_gui PRIVATE ${SDL2_CFLAGS_OTHER})
+  
 else()
     target_link_libraries(camera_mac_explain PRIVATE
         ${SDK_LIB_DIR}/libmongoose.a
     )
     
-    target_link_libraries(camera_mac_explain_gui PRIVATE
-        ${SDK_LIB_DIR}/libmongoose.a
-        ${SDK_LIB_DIR}/libv9.a
-        ${SDL2_LIBRARIES}
-    )
-    
-    target_include_directories(camera_mac_explain_gui PRIVATE ${SDL2_INCLUDE_DIRS})
-    target_compile_options(camera_mac_explain_gui PRIVATE ${SDL2_CFLAGS_OTHER})
+
 endif()
 
 # Install test binaries
-install(TARGETS camera_mac_explain camera_mac_explain_gui DESTINATION bin)
+install(TARGETS camera_mac_explain  DESTINATION bin)
