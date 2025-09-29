@@ -17,6 +17,9 @@
 #include <unistd.h>
 #include <pthread.h>
 
+// 中文字体声明
+extern const lv_font_t font_puhui_basic_14_1;
+
 #define TAG "DISPLAY"              /**< 日志标签 */
 
 /**
@@ -374,13 +377,112 @@ void lvgl_display_destroy(LvglDisplay* display) {
 }
 
 /**
+ * @brief 创建界面元素
+ * @details 创建所有必要的 LVGL 界面元素
+ * @param display 显示器实例
+ * @return 成功返回true，失败返回false
+ */
+static bool create_ui_elements(LvglDisplay* display) {
+    if (!display) return false;
+    
+    // 获取默认显示器
+    lv_display_t* disp = lv_display_get_default();
+    if (!disp) {
+        LINX_LOGE(TAG, "No default display found");
+        return false;
+    }
+    
+    display->display = disp;
+    
+    // 获取屏幕对象
+    lv_obj_t* screen = lv_display_get_screen_active(disp);
+    if (!screen) {
+        LINX_LOGE(TAG, "No active screen found");
+        return false;
+    }
+    
+    // 设置屏幕背景色
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0xf0f0f0), 0);
+    
+    // 创建状态标签（居中显示）
+    display->status_label = lv_label_create(screen);
+    lv_label_set_text(display->status_label, "系统就绪");
+    lv_obj_set_style_text_font(display->status_label, &font_puhui_basic_14_1, 0);
+    lv_obj_set_style_text_color(display->status_label, lv_color_hex(0x333333), 0);
+    lv_obj_center(display->status_label);
+    
+    // 创建通知标签（屏幕上方）
+    display->notification_label = lv_label_create(screen);
+    lv_label_set_text(display->notification_label, "");
+    lv_obj_set_style_text_font(display->notification_label, &font_puhui_basic_14_1, 0);
+    lv_obj_set_style_text_color(display->notification_label, lv_color_hex(0x0066cc), 0);
+    lv_obj_set_style_bg_color(display->notification_label, lv_color_hex(0xe6f3ff), 0);
+    lv_obj_set_style_bg_opa(display->notification_label, LV_OPA_80, 0);
+    lv_obj_set_style_pad_all(display->notification_label, 10, 0);
+    lv_obj_set_style_radius(display->notification_label, 5, 0);
+    lv_obj_align(display->notification_label, LV_ALIGN_TOP_MID, 0, 20);
+    lv_obj_add_flag(display->notification_label, LV_OBJ_FLAG_HIDDEN);
+    
+    // 创建表情标签（屏幕左上角）
+    display->emotion_label = lv_label_create(screen);
+    lv_label_set_text(display->emotion_label, "😊");
+    lv_obj_set_style_text_font(display->emotion_label, &font_puhui_basic_14_1, 0);
+    lv_obj_align(display->emotion_label, LV_ALIGN_TOP_LEFT, 20, 20);
+    
+    // 创建聊天消息标签（屏幕下方）
+    display->chat_message_label = lv_label_create(screen);
+    lv_label_set_text(display->chat_message_label, "");
+    lv_obj_set_style_text_font(display->chat_message_label, &font_puhui_basic_14_1, 0);
+    lv_obj_set_style_text_color(display->chat_message_label, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(display->chat_message_label, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_bg_opa(display->chat_message_label, LV_OPA_90, 0);
+    lv_obj_set_style_pad_all(display->chat_message_label, 15, 0);
+    lv_obj_set_style_radius(display->chat_message_label, 8, 0);
+    lv_obj_set_width(display->chat_message_label, 600);
+    lv_label_set_long_mode(display->chat_message_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(display->chat_message_label, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_add_flag(display->chat_message_label, LV_OBJ_FLAG_HIDDEN);
+    
+    // 创建状态栏元素
+    // 网络状态标签（右上角）
+    display->network_label = lv_label_create(screen);
+    lv_label_set_text(display->network_label, "📶");
+    lv_obj_set_style_text_font(display->network_label, &font_puhui_basic_14_1, 0);
+    lv_obj_align(display->network_label, LV_ALIGN_TOP_RIGHT, -80, 20);
+    
+    // 电池状态标签（右上角）
+    display->battery_label = lv_label_create(screen);
+    lv_label_set_text(display->battery_label, "🔋");
+    lv_obj_set_style_text_font(display->battery_label, &font_puhui_basic_14_1, 0);
+    lv_obj_align(display->battery_label, LV_ALIGN_TOP_RIGHT, -40, 20);
+    
+    // 静音状态标签（右上角）
+    display->mute_label = lv_label_create(screen);
+    lv_label_set_text(display->mute_label, "");
+    lv_obj_set_style_text_font(display->mute_label, &font_puhui_basic_14_1, 0);
+    lv_obj_align(display->mute_label, LV_ALIGN_TOP_RIGHT, -120, 20);
+    
+    LINX_LOGI(TAG, "UI elements created successfully");
+    return true;
+}
+
+/**
  * @brief 初始化显示器
  * @details 检查显示器实例是否有效，执行必要的初始化操作
  * @param display 要初始化的显示器实例
  * @return 成功返回true，失败返回false
  */
 bool lvgl_display_init(LvglDisplay* display) {
-    return display != NULL;
+    if (!display) return false;
+    
+    // 创建界面元素
+    if (!create_ui_elements(display)) {
+        LINX_LOGE(TAG, "Failed to create UI elements");
+        return false;
+    }
+    
+    LINX_LOGI(TAG, "Display initialized successfully");
+    return true;
 }
 
 /**

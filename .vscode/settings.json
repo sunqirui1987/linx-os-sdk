@@ -63,6 +63,10 @@
         "mongoose.h": "c",
         "ostream": "c",
         "version": "c",
-        "cstdio": "c"
+        "cstdio": "c",
+        "lv_sdl_keyboard.h": "c",
+        "lv_sdl_window.h": "c",
+        "lv_sdl_mousewheel.h": "c",
+        "lvgl_display.h": "c"
     }
 }

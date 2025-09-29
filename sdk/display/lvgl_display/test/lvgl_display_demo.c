@@ -24,12 +24,29 @@
 #include <time.h>
 #include <pthread.h>
 
+// 添加 SDL 相关头文件
+#if LV_USE_SDL
+#include <lvgl.h>
+#include "lvgl/src/drivers/sdl/lv_sdl_window.h"
+#include "lvgl/src/drivers/sdl/lv_sdl_mouse.h"
+#include "lvgl/src/drivers/sdl/lv_sdl_keyboard.h"
+#include "lvgl/src/drivers/sdl/lv_sdl_mousewheel.h"
+#endif
+
 #define TAG "DEMO"
 
 // 全局变量
 static LvglDisplay* g_display = NULL;
 static volatile bool g_running = true;
 static pthread_t g_demo_thread;
+
+// SDL 相关全局变量
+#if LV_USE_SDL
+static lv_display_t* g_sdl_display = NULL;
+static lv_indev_t* g_sdl_mouse = NULL;
+static lv_indev_t* g_sdl_keyboard = NULL;
+static lv_indev_t* g_sdl_mousewheel = NULL;
+#endif
 
 // 演示用的状态消息
 static const char* demo_status_messages[] = {
@@ -71,6 +88,12 @@ typedef struct {
     const char* content;
 } ChatMessage;
 
+// SDL 函数前向声明
+#if LV_USE_SDL
+static bool init_sdl_display(void);
+static void cleanup_sdl_display(void);
+#endif
+
 static const ChatMessage demo_chat_messages[] = {
     {"user", "你好，请介绍一下这个系统"},
     {"assistant", "您好！这是 LinX OS SDK 的显示模块演示程序。"},
@@ -85,12 +108,14 @@ static const ChatMessage demo_chat_messages[] = {
 
 /**
  * @brief 信号处理函数
- * @details 处理 Ctrl+C 信号，优雅地退出程序
+ * @details 处理退出信号，优雅地退出程序
  * @param sig 信号编号
  */
 static void signal_handler(int sig) {
-    if (sig == SIGINT) {
-        printf("\n🛑 收到退出信号，正在优雅地关闭演示程序...\n");
+    if (sig == SIGINT || sig == SIGTERM) {
+        printf("\n🛑 收到退出信号 (%s)，正在优雅地关闭演示程序...\n", 
+               sig == SIGINT ? "SIGINT/Ctrl+C" : "SIGTERM");
+        printf("💡 程序将在完成当前操作后安全退出...\n");
         g_running = false;
     }
 }
@@ -364,14 +389,70 @@ static void print_usage(void) {
  * @return 程序退出码
  */
 int main(int argc, char* argv[]) {
-    (void)argc; // 避免未使用参数警告
-    (void)argv;
+    printf("🚀 程序启动中...\n");
+    fflush(stdout);
     
-    printf("🚀 启动 LVGL Display Demo\n");
-    printf("==============================\n");
+    LINX_LOGI(TAG, "Starting LVGL Display Demo");
     
-    // 设置信号处理
+    // 注册信号处理器
     signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    
+    printf("📝 注册信号处理器完成\n");
+    fflush(stdout);
+    
+    // 初始化 LVGL
+    printf("🔧 初始化 LVGL...\n");
+    fflush(stdout);
+    lv_init();
+    printf("✅ LVGL 初始化完成\n");
+    fflush(stdout);
+    
+#if LV_USE_SDL
+    // 初始化 SDL 显示
+    printf("🖥️  初始化 SDL 显示...\n");
+    fflush(stdout);
+    if (!init_sdl_display()) {
+        printf("❌ SDL 显示初始化失败\n");
+        fflush(stdout);
+        LINX_LOGE(TAG, "Failed to initialize SDL display");
+        return EXIT_FAILURE;
+    }
+    printf("✅ SDL 显示初始化成功\n");
+    fflush(stdout);
+#endif
+    
+    // 创建 LVGL 显示实例
+    printf("🎨 创建 LVGL 显示实例...\n");
+    fflush(stdout);
+    g_display = lvgl_display_create();
+    if (!g_display) {
+        printf("❌ LVGL 显示实例创建失败\n");
+        fflush(stdout);
+        LINX_LOGE(TAG, "Failed to create LVGL display");
+#if LV_USE_SDL
+        cleanup_sdl_display();
+#endif
+        return EXIT_FAILURE;
+    }
+    printf("✅ LVGL 显示实例创建成功\n");
+    fflush(stdout);
+    
+    // 初始化显示
+    printf("🔧 初始化 LVGL 显示实例...\n");
+    fflush(stdout);
+    if (!lvgl_display_init(g_display)) {
+        printf("❌ LVGL 显示实例初始化失败\n");
+        fflush(stdout);
+        LINX_LOGE(TAG, "Failed to initialize LVGL display");
+        lvgl_display_destroy(g_display);
+#if LV_USE_SDL
+        cleanup_sdl_display();
+#endif
+        return EXIT_FAILURE;
+    }
+    printf("✅ LVGL 显示实例初始化成功\n");
+    fflush(stdout);
     
     // 初始化随机数种子
     srand(time(NULL));
@@ -379,68 +460,96 @@ int main(int argc, char* argv[]) {
     // 打印使用说明
     print_usage();
     
-    // 创建显示器实例
-    printf("🔧 创建 LVGL 显示器实例...\n");
-    g_display = lvgl_display_create();
-    if (!g_display) {
-        printf("❌ 创建显示器失败\n");
-        return EXIT_FAILURE;
-    }
-    
-    // 初始化显示器
-    printf("🔧 初始化显示器...\n");
-    if (!lvgl_display_init(g_display)) {
-        printf("❌ 初始化显示器失败\n");
-        lvgl_display_destroy(g_display);
-        return EXIT_FAILURE;
-    }
-    
-    printf("✅ LVGL 显示器初始化成功\n");
-    
     // 设置状态回调
     setup_status_callbacks();
     
     // 启动演示线程
-    printf("🎬 启动演示线程...\n");
     if (pthread_create(&g_demo_thread, NULL, demo_thread_func, NULL) != 0) {
-        printf("❌ 创建演示线程失败\n");
+        LINX_LOGE(TAG, "Failed to create demo thread");
         lvgl_display_destroy(g_display);
+#if LV_USE_SDL
+        cleanup_sdl_display();
+#endif
         return EXIT_FAILURE;
     }
     
-    printf("✅ 演示程序启动成功\n");
-    printf("💡 使用 Ctrl+C 退出程序\n");
-    printf("📱 正在运行演示...\n\n");
+    LINX_LOGI(TAG, "Demo started. Press Ctrl+C to exit.");
     
-    // 主循环
-    int screenshot_counter = 0;
+    // 主循环 - 处理 LVGL 任务
     while (g_running) {
-        // 每30秒进行一次截图演示
-        if (screenshot_counter >= 15) { // 15 * 2秒 = 30秒
-            demo_screenshot();
-            screenshot_counter = 0;
-        }
-        
-        screenshot_counter++;
-        sleep(2); // 每2秒检查一次
+        lv_timer_handler();
+        usleep(5000); // 5ms 延迟
     }
-    
-    // 清理资源
-    printf("\n🧹 正在清理资源...\n");
     
     // 等待演示线程结束
-    if (pthread_join(g_demo_thread, NULL) != 0) {
-        printf("⚠️  等待演示线程结束时出错\n");
-    }
+    g_running = false;
+    pthread_join(g_demo_thread, NULL);
     
-    // 销毁显示器
+    // 清理资源
     if (g_display) {
         lvgl_display_destroy(g_display);
         g_display = NULL;
     }
     
-    printf("✅ 资源清理完成\n");
-    printf("👋 LVGL Display Demo 已退出\n");
+#if LV_USE_SDL
+    cleanup_sdl_display();
+#endif
+    
+    LINX_LOGI(TAG, "Demo finished");
     
     return EXIT_SUCCESS;
 }
+
+// SDL 初始化函数
+#if LV_USE_SDL
+static bool init_sdl_display(void) {
+    printf("🪟 创建 SDL 窗口 (800x480)...\n");
+    fflush(stdout);
+    
+    // 创建 SDL 窗口
+    g_sdl_display = lv_sdl_window_create(800, 480);
+    if (!g_sdl_display) {
+        printf("❌ SDL 窗口创建失败\n");
+        fflush(stdout);
+        LINX_LOGE(TAG, "Failed to create SDL window");
+        return false;
+    }
+    printf("✅ SDL 窗口创建成功\n");
+    fflush(stdout);
+    
+    // 设置窗口标题
+    lv_sdl_window_set_title(g_sdl_display, "LVGL Display Demo");
+    
+    // 创建输入设备
+    g_sdl_mouse = lv_sdl_mouse_create();
+    g_sdl_keyboard = lv_sdl_keyboard_create();
+    g_sdl_mousewheel = lv_sdl_mousewheel_create();
+    
+    LINX_LOGI(TAG, "SDL display initialized successfully");
+    return true;
+}
+
+static void cleanup_sdl_display(void) {
+    if (g_sdl_display) {
+        lv_display_delete(g_sdl_display);
+        g_sdl_display = NULL;
+    }
+    
+    if (g_sdl_mouse) {
+        lv_indev_delete(g_sdl_mouse);
+        g_sdl_mouse = NULL;
+    }
+    
+    if (g_sdl_keyboard) {
+        lv_indev_delete(g_sdl_keyboard);
+        g_sdl_keyboard = NULL;
+    }
+    
+    if (g_sdl_mousewheel) {
+        lv_indev_delete(g_sdl_mousewheel);
+        g_sdl_mousewheel = NULL;
+    }
+    
+    LINX_LOGI(TAG, "SDL display cleaned up");
+}
+#endif

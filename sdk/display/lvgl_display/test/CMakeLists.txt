@@ -8,8 +8,47 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Add compiler flags for better debugging and warnings
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -g")
 
+# 检查 macOS 上的 SDL2 安装
+if(APPLE)
+    message(STATUS "Checking SDL2 installation on macOS...")
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+        message(STATUS "Detected Apple Silicon (arm64) architecture")
+        if(NOT EXISTS "/opt/homebrew/lib/libSDL2.dylib")
+            message(WARNING "SDL2 not found for arm64 architecture!")
+            message(WARNING "Please install SDL2 using: brew install sdl2")
+            message(WARNING "Make sure you're using Homebrew for Apple Silicon (/opt/homebrew)")
+        endif()
+    endif()
+endif()
+
 # 查找必要的库
 find_package(Threads REQUIRED)
+
+# 针对 Apple Silicon Mac 的 SDL2 配置
+if(APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+    # 优先使用 Homebrew 安装的 SDL2
+    set(SDL2_ROOT "/opt/homebrew")
+    find_package(SDL2 QUIET)
+    
+    if(NOT SDL2_FOUND)
+        # 如果没找到，尝试使用 pkg-config
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(SDL2 REQUIRED sdl2)
+        
+        # 过滤掉 x86_64 架构的库
+        set(SDL2_FILTERED_LIBRARIES "")
+        foreach(lib ${SDL2_LIBRARIES})
+            if(NOT lib MATCHES "x86_64")
+                list(APPEND SDL2_FILTERED_LIBRARIES ${lib})
+            endif()
+        endforeach()
+        set(SDL2_LIBRARIES ${SDL2_FILTERED_LIBRARIES})
+    endif()
+else()
+    # 其他平台使用标准方式
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED sdl2)
+endif()
 
 # 设置 LVGL 相关路径
 set(LVGL_DIR ${CMAKE_SOURCE_DIR}/../../../third/liblvgl/v9)
@@ -45,11 +84,11 @@ else()
     set(LOG_INCLUDE_DIRS "")
 endif()
 
-# Include directories
+## Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/../../../third/liblvgl/v9
     ${CMAKE_SOURCE_DIR}/../../../third/liblvgl/v9/lvgl
-    ${CMAKE_SOURCE_DIR}/../../../third/liblvgl/v9/conf
+
     ${CMAKE_SOURCE_DIR}/../../../third/fonts/include
     ${CMAKE_SOURCE_DIR}/..
     ${LOG_INCLUDE_DIRS}
@@ -86,6 +125,17 @@ target_link_libraries(lvgl_display_demo
     m
 )
 
+# 根据 SDL2 查找方式链接库
+if(TARGET SDL2::SDL2)
+    target_link_libraries(lvgl_display_demo SDL2::SDL2)
+    message(STATUS "Using SDL2::SDL2 target")
+else()
+    target_link_libraries(lvgl_display_demo ${SDL2_LIBRARIES})
+    target_include_directories(lvgl_display_demo PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_compile_options(lvgl_display_demo PRIVATE ${SDL2_CFLAGS_OTHER})
+    message(STATUS "Using SDL2 libraries: ${SDL2_LIBRARIES}")
+endif()
+
 # Link LVGL if available
 if(LVGL_TARGET)
     target_link_libraries(lvgl_display_demo ${LVGL_TARGET})
@@ -106,6 +156,7 @@ target_compile_definitions(lvgl_display_demo PRIVATE
     LV_CONF_INCLUDE_SIMPLE=1
     LV_USE_LOG=1
     LV_LOG_LEVEL=LV_LOG_LEVEL_INFO
+    LV_USE_SDL=1
 )
 
 # Create a custom target to run the demo
