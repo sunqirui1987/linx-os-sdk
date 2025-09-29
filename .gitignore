@@ -14,3 +14,4 @@ sdk/camera/test/build
 bak
 sdk/http/test/build
 *.o
+sdk/display/lvgl_display/test/build
