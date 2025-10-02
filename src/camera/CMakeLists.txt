@@ -1,31 +1,73 @@
 cmake_minimum_required(VERSION 3.10)
+project(linx_camera)
 
-# 相机库通用源文件
-set(CAMERA_SOURCES
+# Set project name
+set(LINX_CAMERA_TARGET linx_camera)
+
+# Set C standard
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# Include directories
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/log
+)
+
+# Collect all source files
+set(LINX_CAMERA_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/camera_interface.c
     ${CMAKE_CURRENT_SOURCE_DIR}/camera_stub.c
 )
 
-set(CAMERA_HEADERS
-    camera_interface.h
-    camera_stub.h
+# Create static library
+add_library(${LINX_CAMERA_TARGET} STATIC ${LINX_CAMERA_SOURCES})
+
+# Set target properties for static library
+set_target_properties(${LINX_CAMERA_TARGET} PROPERTIES
+    OUTPUT_NAME "linx_camera"
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    PREFIX "lib"
+    SUFFIX ".a"
 )
 
-# ========================================
-# 对外暴露变量 - 供父级 CMakeLists.txt 使用
-# ========================================
+# Target include directories (for consumers of this library)
+target_include_directories(${LINX_CAMERA_TARGET} PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
-# 将相机模块的源文件列表设置为父作用域变量
-set(LINX_CAMERA_SOURCES ${CAMERA_SOURCES} PARENT_SCOPE)
+# Compiler flags
+target_compile_options(${LINX_CAMERA_TARGET} PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+    -Wno-unused-variable
+    -Wno-unused-parameter
+    -Wno-unused-function
+    -O2
+)
 
-# 将相机模块的头文件列表设置为父作用域变量  
-set(LINX_CAMERA_HEADERS ${CAMERA_HEADERS} PARENT_SCOPE)
+# Link with common libraries if they exist
+if(TARGET linx_common)
+    target_link_libraries(${LINX_CAMERA_TARGET} PUBLIC linx_common)
+endif()
 
-# 将平台特定的库依赖设置为父作用域变量
-set(LINX_CAMERA_PLATFORM_LIBS ${CAMERA_PLATFORM_LIBS} PARENT_SCOPE)
+# Install rules
+install(TARGETS ${LINX_CAMERA_TARGET}
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
 
-# 将包含目录设置为父作用域变量
-set(LINX_CAMERA_INCLUDE_DIRS ${CAMERA_INCLUDE_DIRS} PARENT_SCOPE)
+# Install header files
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/camera_interface.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/camera_stub.h
+    DESTINATION include/linx_camera
+)
 
-# 将库目录设置为父作用域变量
-set(LINX_CAMERA_LIBRARY_DIRS ${CAMERA_LIBRARY_DIRS} PARENT_SCOPE)
+# Print build information
+message(STATUS "Building LINX Camera Library")
+message(STATUS "  - Static library: linx_camera")
