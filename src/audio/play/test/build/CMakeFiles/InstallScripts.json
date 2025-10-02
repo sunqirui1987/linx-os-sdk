@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/cmake_install.cmake",
+		"/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/play/cmake_install.cmake",
+		"/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/audio/cmake_install.cmake",
+		"/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/codecs/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

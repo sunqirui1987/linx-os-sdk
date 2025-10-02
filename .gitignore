@@ -15,3 +15,11 @@ bak
 sdk/http/test/build
 *.o
 sdk/display/lvgl_display/test/build
+*/build/
+src/audio/audio/test/build
+src/common/http/test/build
+src/display/build
+src/linxsdk/build
+src/linxsdk/mcp/test/build
+src/linxsdk/ota/test/build
+src/linxsdk/protocols/test/build

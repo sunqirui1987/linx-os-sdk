@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/cmake_install.cmake",
+		"/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/codecs/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

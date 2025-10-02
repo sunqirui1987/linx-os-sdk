@@ -1,0 +1,14 @@
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/CMakeFiles/play_audio_test.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/CMakeFiles/run_play_tests.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/CMakeFiles/test.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/CMakeFiles/edit_cache.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/CMakeFiles/rebuild_cache.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/play/CMakeFiles/test.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/play/CMakeFiles/edit_cache.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/play/CMakeFiles/rebuild_cache.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/audio/CMakeFiles/test.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/audio/CMakeFiles/edit_cache.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/audio/CMakeFiles/rebuild_cache.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/codecs/CMakeFiles/test.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/codecs/CMakeFiles/edit_cache.dir
+/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/play/test/build/codecs/CMakeFiles/rebuild_cache.dir
