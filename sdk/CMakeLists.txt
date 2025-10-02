@@ -45,7 +45,7 @@ add_subdirectory(codecs)
 add_subdirectory(audio)
 add_subdirectory(play)
 add_subdirectory(ota)
-
+add_subdirectory(display)
 
 
 # =============================================================================
@@ -61,6 +61,7 @@ set(LINX_SDK_SOURCES
     ${LINX_CODEC_SOURCES}
     ${LINX_AUDIO_SOURCES}
     ${LINX_PLAY_SOURCES}
+    ${LINX_DISPLAY_SOURCES}
     linx_sdk.c
 )
 
@@ -73,6 +74,7 @@ set(LINX_SDK_DIRS
     ${LINX_PROTOCOLS_INCLUDE_DIRS}
     ${LINX_CJSON_INCLUDE_DIRS}
     ${LINX_PLAY_INCLUDE_DIRS}
+    ${LINX_DISPLAY_INCLUDE_DIRS}
 )
 
 # Collect all platform-specific libraries
@@ -80,6 +82,7 @@ set(LINX_SDK_PLATFORM_LIBS
     ${LINX_AUDIO_PLATFORM_LIBS}
     ${LINX_CODEC_PLATFORM_LIBS}
     ${LINX_PROTOCOLS_PLATFORM_LIBS}
+    ${LINX_DISPLAY_PLATFORM_LIBS}
 )
 
 message(STATUS "LINX SDK SOURCES: ${LINX_SDK_SOURCES}")
@@ -155,6 +158,11 @@ install(DIRECTORY audio/
 
 install(DIRECTORY play/
     DESTINATION include/play
+    FILES_MATCHING PATTERN "*.h"
+)
+
+install(DIRECTORY display/
+    DESTINATION include/display
     FILES_MATCHING PATTERN "*.h"
 )
 
