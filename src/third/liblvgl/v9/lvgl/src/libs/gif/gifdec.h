@@ -6,7 +6,6 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include "lvgl.h"
 #include "../../misc/lv_fs.h"
 
 #if LV_USE_GIF

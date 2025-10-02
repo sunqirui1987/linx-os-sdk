@@ -10,9 +10,9 @@
 extern "C" {
 #endif
 
-// 前向声明
-typedef struct AudioInterface AudioInterface;
-typedef struct audio_codec audio_codec_t;
+// 包含相关头文件而不是前向声明
+#include "../audio/audio_interface.h"
+#include "../codecs/audio_codec.h"
 
 /**
  * 播放器状态枚举

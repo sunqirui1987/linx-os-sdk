@@ -24,3 +24,5 @@ src/linxsdk/mcp/test/build
 src/linxsdk/ota/test/build
 src/linxsdk/protocols/test/build
 src/common/build
+src/third/liblvgl/build
+src/audio/build

@@ -26,6 +26,10 @@ if(EXISTS "${patch_dir}")
 endif()
 
 
+# =============================================================================
+# Third-party libraries (build first as dependencies)
+# =============================================================================
+
 # Add third-party libraries
 add_subdirectory(third/mongoose)
 add_subdirectory(third/opus)
@@ -33,74 +37,98 @@ add_subdirectory(third/fonts)
 add_subdirectory(third/liblvgl)
 
 # =============================================================================
-# Add subdirectories to build individual libraries
+# Add subdirectories in dependency order
 # =============================================================================
 
-# Add subdirectories in dependency order
-add_subdirectory(log)
-add_subdirectory(cjson)
-add_subdirectory(mcp)
-add_subdirectory(protocols)
-add_subdirectory(codecs)
+add_subdirectory(common)
+add_subdirectory(camera)
 add_subdirectory(audio)
-add_subdirectory(play)
-add_subdirectory(ota)
 add_subdirectory(display)
+add_subdirectory(linxsdk)
 
 
 # =============================================================================
 # Create unified static library
 # =============================================================================
 
-# Collect all module sources into a single list
-set(LINX_SDK_SOURCES
-    ${LINX_LOG_SOURCES}
-    ${LINX_CJSON_SOURCES}
-    ${LINX_MCP_SOURCES}
-    ${LINX_PROTOCOLS_SOURCES}
-    ${LINX_CODEC_SOURCES}
-    ${LINX_AUDIO_SOURCES}
-    ${LINX_PLAY_SOURCES}
-    ${LINX_DISPLAY_SOURCES}
-    linx_sdk.c
+# Create the main SDK library that links all component libraries
+add_library(linx_sdk_static STATIC
+    linxsdk/linx_sdk.c
 )
-
-# Collect all include directories
-set(LINX_SDK_DIRS
-    ${LINX_AUDIO_INCLUDE_DIRS}
-    ${LINX_CODEC_INCLUDE_DIRS}
-    ${LINX_LOG_INCLUDE_DIRS}
-    ${LINX_MCP_INCLUDE_DIRS}
-    ${LINX_PROTOCOLS_INCLUDE_DIRS}
-    ${LINX_CJSON_INCLUDE_DIRS}
-    ${LINX_PLAY_INCLUDE_DIRS}
-    ${LINX_DISPLAY_INCLUDE_DIRS}
-)
-
-# Collect all platform-specific libraries
-set(LINX_SDK_PLATFORM_LIBS
-    ${LINX_AUDIO_PLATFORM_LIBS}
-    ${LINX_CODEC_PLATFORM_LIBS}
-    ${LINX_PROTOCOLS_PLATFORM_LIBS}
-    ${LINX_DISPLAY_PLATFORM_LIBS}
-)
-
-message(STATUS "LINX SDK SOURCES: ${LINX_SDK_SOURCES}")
-message(STATUS "LINX SDK DIRS: ${LINX_SDK_DIRS}")
-message(STATUS "LINX SDK PLATFORM LIBS: ${LINX_SDK_PLATFORM_LIBS}")
-
-# Create the unified static library
-add_library(linx_sdk_static STATIC ${LINX_SDK_SOURCES})
 
 # =============================================================================
 # Configure target properties
 # =============================================================================
 
-# Set public include directories for consumers of this library
-target_include_directories(linx_sdk_static PUBLIC ${LINX_SDK_DIRS})
+# Set target properties
+set_target_properties(linx_sdk_static PROPERTIES
+    OUTPUT_NAME "linx_sdk"
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+    PREFIX "lib"
+    SUFFIX ".a"
+)
 
-# Link required platform-specific libraries
-target_link_libraries(linx_sdk_static PRIVATE ${LINX_SDK_PLATFORM_LIBS})
+# Set public include directories for consumers of this library
+target_include_directories(linx_sdk_static PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/linxsdk
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/camera
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio
+    ${CMAKE_CURRENT_SOURCE_DIR}/display
+)
+
+# Link with component libraries
+target_link_libraries(linx_sdk_static PUBLIC
+    linx_common
+    linx_camera
+    linx_audio
+    linx_display
+    linx_sdk
+)
+
+# Link with third-party libraries
+if(TARGET mongoose)
+    target_link_libraries(linx_sdk_static PUBLIC mongoose)
+endif()
+
+if(TARGET opus)
+    target_link_libraries(linx_sdk_static PUBLIC opus)
+endif()
+
+if(TARGET fonts)
+    target_link_libraries(linx_sdk_static PUBLIC fonts)
+endif()
+
+if(TARGET lvgl)
+    target_link_libraries(linx_sdk_static PUBLIC lvgl)
+endif()
+
+# Platform-specific libraries
+if(APPLE)
+    target_link_libraries(linx_sdk_static PUBLIC
+        "-framework AudioToolbox"
+        "-framework CoreAudio"
+        "-framework AudioUnit"
+    )
+elseif(UNIX)
+    target_link_libraries(linx_sdk_static PUBLIC
+        pthread
+        m
+        asound
+    )
+endif()
+
+# Compiler flags
+target_compile_options(linx_sdk_static PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+    -Wno-unused-variable
+    -Wno-unused-parameter
+    -Wno-unused-function
+    -O2
+)
 
 
 
@@ -113,114 +141,52 @@ target_link_libraries(linx_sdk_static PRIVATE ${LINX_SDK_PLATFORM_LIBS})
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/../out/linx CACHE PATH "Installation directory" FORCE)
 message(STATUS "SDK installation directory: ${CMAKE_INSTALL_PREFIX}")
 
-# Install the static library
-install(TARGETS linx_sdk_static
+# Install all libraries
+install(TARGETS linx_sdk_static linx_common linx_camera linx_audio linx_display linx_sdk
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
 
-# Install the main header file
-install(FILES linx_sdk.h
-    DESTINATION include
-)
 
-# Install subdirectory headers
-install(DIRECTORY log/ 
-    DESTINATION include/log
+
+# Install component headers with src directory structure
+install(DIRECTORY common/
+    DESTINATION include/common
     FILES_MATCHING PATTERN "*.h"
 )
 
-install(DIRECTORY cjson/
-    DESTINATION include/cjson  
-    FILES_MATCHING PATTERN "*.h"
-)
-
-install(DIRECTORY mcp/
-    DESTINATION include/mcp
-    FILES_MATCHING PATTERN "*.h"
-)
-
-install(DIRECTORY protocols/
-    DESTINATION include/protocols
-    FILES_MATCHING PATTERN "*.h"
-)
-
-install(DIRECTORY codecs/
-    DESTINATION include/codecs
+install(DIRECTORY camera/
+    DESTINATION include/camera
     FILES_MATCHING PATTERN "*.h"
 )
 
 install(DIRECTORY audio/
     DESTINATION include/audio
     FILES_MATCHING PATTERN "*.h"
-)
-
-install(DIRECTORY play/
-    DESTINATION include/play
-    FILES_MATCHING PATTERN "*.h"
+    PATTERN "test" EXCLUDE
 )
 
 install(DIRECTORY display/
     DESTINATION include/display
     FILES_MATCHING PATTERN "*.h"
+    PATTERN "test" EXCLUDE
 )
 
-# Install third-party libraries
-# Install mongoose library
-install(TARGETS mongoose
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
-
-# Install mongoose headers
-install(FILES third/mongoose/mongoose.h
-    DESTINATION include/third/mongoose
-)
-
-# Install opus library
-install(TARGETS opus
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
-
-# Install opus headers
-install(FILES third/opus/include/opus.h third/opus/include/opus_multistream.h third/opus/include/opus_types.h third/opus/include/opus_defines.h
-    DESTINATION include/third/opus
-)
-
-# Install fonts library
-install(TARGETS fonts
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
-
-# Install fonts headers
-install(DIRECTORY third/fonts/include/
-    DESTINATION include/third/fonts
+install(DIRECTORY linxsdk/
+    DESTINATION include/linxsdk
     FILES_MATCHING PATTERN "*.h"
 )
 
-# Install lvgl library
-install(TARGETS v9
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
-
-# Install lvgl headers
-install(FILES third/liblvgl/v9/lvgl/lvgl.h
-    DESTINATION include/third/liblvgl
-)
-
-install(DIRECTORY third/liblvgl/v9/lvgl/src/
-    DESTINATION include/third/liblvgl/src
+# Install third-party headers with src directory structure
+install(DIRECTORY third/
+    DESTINATION include/third
     FILES_MATCHING PATTERN "*.h"
-)
-
-install(FILES third/liblvgl/v9/conf/lv_conf.h
-    DESTINATION include/third/liblvgl/conf
+    PATTERN "test" EXCLUDE
+    PATTERN "build" EXCLUDE
+    PATTERN ".git*" EXCLUDE
+    PATTERN "examples" EXCLUDE
+    PATTERN "tutorials" EXCLUDE
+    PATTERN "doc" EXCLUDE
+    PATTERN "docs" EXCLUDE
 )

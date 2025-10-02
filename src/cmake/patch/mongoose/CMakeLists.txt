@@ -74,7 +74,6 @@ install(TARGETS mongoose
     RUNTIME DESTINATION bin
 )
 
-install(FILES mongoose.h DESTINATION include)
 
 # Export targets
 install(EXPORT mongooseTargets
