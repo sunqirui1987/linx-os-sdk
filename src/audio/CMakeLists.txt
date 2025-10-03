@@ -14,23 +14,19 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/codecs
     ${CMAKE_CURRENT_SOURCE_DIR}/play
+    ${CMAKE_CURRENT_SOURCE_DIR}/vad
+    ${CMAKE_CURRENT_SOURCE_DIR}/wake_words
     ${CMAKE_CURRENT_SOURCE_DIR}/../common/log
     ${CMAKE_CURRENT_SOURCE_DIR}/../third/opus/include
 )
 
-# Collect all source files from subdirectories
-set(LINX_AUDIO_SOURCES
-    # Audio interface sources
-    ${CMAKE_CURRENT_SOURCE_DIR}/audio/audio_interface.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/audio/audio_stub.c
-    
-    # Codec sources
-    ${CMAKE_CURRENT_SOURCE_DIR}/codecs/audio_codec.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/codecs/opus_codec.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/codecs/codec_stub.c
-    
-    # Player sources
-    ${CMAKE_CURRENT_SOURCE_DIR}/play/linx_player.c
+# Collect all source files from subdirectories automatically (excluding test directories)
+file(GLOB LINX_AUDIO_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/audio/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/codecs/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/play/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vad/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/wake_words/*.c"
 )
 
 # Create static library
@@ -52,6 +48,8 @@ target_include_directories(${LINX_AUDIO_TARGET} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/codecs
     ${CMAKE_CURRENT_SOURCE_DIR}/play
+    ${CMAKE_CURRENT_SOURCE_DIR}/vad
+    ${CMAKE_CURRENT_SOURCE_DIR}/wake_words
     ${CMAKE_CURRENT_SOURCE_DIR}/../third/opus/include
 )
 
@@ -119,6 +117,21 @@ install(FILES
     DESTINATION include/linx_audio/play
 )
 
+# Install VAD headers (when available)
+file(GLOB VAD_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/vad/*.h")
+if(VAD_HEADERS)
+    install(FILES ${VAD_HEADERS}
+        DESTINATION include/linx_audio/vad
+    )
+endif()
+
+# Install wake words headers
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/wake_words/wake_word_interface.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/wake_words/wake_word_stub.h
+    DESTINATION include/linx_audio/wake_words
+)
+
 # Print build information
 message(STATUS "Building LINX Audio Library")
-message(STATUS "  - Combined library: linx_audio (includes audio interface, codecs, and player)")
+message(STATUS "  - Combined library: linx_audio (includes audio interface, codecs, player, vad, and wake words)")

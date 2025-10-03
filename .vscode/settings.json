@@ -69,6 +69,11 @@
         "lv_sdl_mousewheel.h": "c",
         "lvgl_display.h": "c",
         "stdarg.h": "c",
-        "jpeg_encoder.h": "c"
+        "jpeg_encoder.h": "c",
+        "cstdint": "cpp",
+        "iosfwd": "cpp",
+        "stdexcept": "cpp",
+        "atomic": "cpp",
+        "__tree": "cpp"
     }
 }
