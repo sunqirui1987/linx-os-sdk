@@ -24,14 +24,13 @@ message(STATUS "Mac board installation base directory: ${LINX_MAC_INSTALL_BASE}"
 
 # Mac platform specific audio sources
 set(MAC_AUDIO_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/portaudio_mac.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/camera/camera_mac.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/audio/portaudio_mac.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/processor/audio_processor_mac.c
 )
 
 set(MAC_AUDIO_HEADERS
-    common/audio/portaudio_mac.h
-
-    common/camera/camera_mac.h
+    common/audio/audio/portaudio_mac.h
+    common/audio/processor/audio_processor_mac.h
 )
 
 # =============================================================================
@@ -94,6 +93,7 @@ set(MAC_PLATFORM_LIBS
     "-framework AudioUnit"
     "-framework CoreFoundation"
     "-framework CoreServices"
+    "-framework Accelerate"
     pthread
 )
 
@@ -229,8 +229,13 @@ install(TARGETS linx_board_mac
 
 # Install headers
 install(FILES 
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/portaudio_mac.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/audio/portaudio_mac.h
     DESTINATION ${LINX_MAC_INSTALL_BASE}/include/board/mac/audio
+)
+
+install(FILES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/audio/processor/audio_processor_mac.h
+    DESTINATION ${LINX_MAC_INSTALL_BASE}/include/board/mac/processor
 )
 
 # Export targets for use by other projects

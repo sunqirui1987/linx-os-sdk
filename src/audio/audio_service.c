@@ -152,7 +152,7 @@ static void* audio_input_thread_func(void* arg) {
         if (bits & AS_EVENT_AUDIO_TESTING_RUNNING) {
             if (audio_packet_queue_size(&service->audio_testing_queue) >= 
                 AUDIO_TESTING_MAX_DURATION_MS / OPUS_FRAME_DURATION_MS) {
-                LOG_WARN("Audio testing queue is full, stopping audio testing");
+                LINX_LOGW(AUDIO_SERVICE_TAG, "Audio testing queue is full, stopping audio testing");
                 audio_service_enable_audio_testing(service, false);
                 continue;
             }
@@ -218,7 +218,7 @@ static void* audio_input_thread_func(void* arg) {
         usleep(1000);
     }
     
-    LOG_WARN("Audio input thread stopped");
+    LINX_LOGW(AUDIO_SERVICE_TAG, "Audio input thread stopped");
     return NULL;
 }
 
@@ -255,7 +255,7 @@ static void* audio_output_thread_func(void* arg) {
         }
     }
     
-    LOG_WARN("Audio output thread stopped");
+    LINX_LOGW(AUDIO_SERVICE_TAG, "Audio output thread stopped");
     return NULL;
 }
 
@@ -317,10 +317,10 @@ static void* opus_codec_thread_func(void* arg) {
                             
                             service->debug_statistics.decode_count++;
                         } else {
-                            LOG_ERROR("Failed to create audio task");
+                            LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to create audio task");
                         }
                     } else {
-                        LOG_ERROR("Failed to decode audio");
+                        LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to decode audio");
                         free(decoded_data);
                     }
                 }
@@ -370,7 +370,7 @@ static void* opus_codec_thread_func(void* arg) {
                             
                             service->debug_statistics.encode_count++;
                         } else {
-                            LOG_ERROR("Failed to encode audio");
+                            LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to encode audio");
                             audio_stream_packet_destroy(packet);
                         }
                     } else {
@@ -388,7 +388,7 @@ static void* opus_codec_thread_func(void* arg) {
         usleep(1000);
     }
     
-    LOG_WARN("Opus codec thread stopped");
+    LINX_LOGW(AUDIO_SERVICE_TAG, "Opus codec thread stopped");
     return NULL;
 }
 
@@ -473,17 +473,17 @@ int audio_service_start(AudioService* service) {
     
     // Create threads
     if (pthread_create(&service->audio_input_thread, NULL, audio_input_thread_func, service) != 0) {
-        LOG_ERROR("Failed to create audio input thread");
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to create audio input thread");
         return -1;
     }
     
     if (pthread_create(&service->audio_output_thread, NULL, audio_output_thread_func, service) != 0) {
-        LOG_ERROR("Failed to create audio output thread");
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to create audio output thread");
         return -1;
     }
     
     if (pthread_create(&service->opus_codec_thread, NULL, opus_codec_thread_func, service) != 0) {
-        LOG_ERROR("Failed to create opus codec thread");
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to create opus codec thread");
         return -1;
     }
     
@@ -573,12 +573,12 @@ void audio_service_enable_wake_word_detection(AudioService* service, bool enable
         return;
     }
     
-    LOG_DEBUG("%s wake word detection", enable ? "Enabling" : "Disabling");
+    LINX_LOGD(AUDIO_SERVICE_TAG, "%s wake word detection", enable ? "Enabling" : "Disabling");
     
     if (enable) {
         if (!service->wake_word_initialized) {
             if (wake_word_interface_initialize(service->wake_word, service->codec, service->models_list) != 0) {
-                LOG_ERROR("Failed to initialize wake word");
+                LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to initialize wake word");
                 return;
             }
             service->wake_word_initialized = true;
@@ -596,7 +596,7 @@ void audio_service_enable_voice_processing(AudioService* service, bool enable) {
         return;
     }
     
-    LOG_DEBUG("%s voice processing", enable ? "Enabling" : "Disabling");
+    LINX_LOGD(AUDIO_SERVICE_TAG, "%s voice processing", enable ? "Enabling" : "Disabling");
     
     if (enable) {
         if (!service->audio_processor_initialized && service->audio_processor) {
@@ -632,7 +632,7 @@ void audio_service_enable_audio_testing(AudioService* service, bool enable) {
         return;
     }
     
-    LOG_INFO("%s audio testing", enable ? "Enabling" : "Disabling");
+    LINX_LOGI(AUDIO_SERVICE_TAG, "%s audio testing", enable ? "Enabling" : "Disabling");
     
     if (enable) {
         set_event_bit(service, AS_EVENT_AUDIO_TESTING_RUNNING);
@@ -659,7 +659,7 @@ void audio_service_enable_device_aec(AudioService* service, bool enable) {
         return;
     }
     
-    LOG_INFO("%s device AEC", enable ? "Enabling" : "Disabling");
+    LINX_LOGI(AUDIO_SERVICE_TAG, "%s device AEC", enable ? "Enabling" : "Disabling");
     
     if (!service->audio_processor_initialized && service->audio_processor) {
         // 需要创建配置结构体来初始化音频处理器
@@ -791,7 +791,7 @@ void audio_service_play_sound(AudioService* service, const uint8_t* ogg_data, si
     
     // Simplified OGG playback - in real implementation, this would parse OGG and decode
     // For now, just log the action
-    LOG_INFO("Playing sound of size %zu bytes", ogg_size);
+    LINX_LOGI(AUDIO_SERVICE_TAG, "Playing sound of size %zu bytes", ogg_size);
 }
 
 bool audio_service_read_audio_data(AudioService* service, int16_t* data, int sample_rate, int samples) {
