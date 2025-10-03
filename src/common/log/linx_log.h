@@ -135,10 +135,11 @@ bool log_is_level_enabled(log_level_t level);
     } while(0)
 
 
-// Define LINX log macros
+// Define LINX log macros/* 便捷宏定义 */
 #define LINX_LOGE(tag, fmt, ...) LOG_ERROR("[%s] " fmt, tag, ##__VA_ARGS__)
 #define LINX_LOGW(tag, fmt, ...) LOG_WARN("[%s] " fmt, tag, ##__VA_ARGS__)
 #define LINX_LOGI(tag, fmt, ...) LOG_INFO("[%s] " fmt, tag, ##__VA_ARGS__)
+#define LINX_LOGD(tag, fmt, ...) LOG_DEBUG("[%s] " fmt, tag, ##__VA_ARGS__)
 
 
 #ifdef __cplusplus

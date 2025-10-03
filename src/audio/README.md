@@ -6,18 +6,17 @@
 
 ### 已实现组件
 
--   **<mcfile name="audio_interface.h" path="/Users/sunqirui/gitlab/aiagent/linx-os-sdk/src/audio/audio/audio_interface.h"></mcfile>**: 音频接口抽象层，提供统一的音频录制和播放接口。支持多平台实现（PortAudio、ESP32、ALSA等）。
--   **<mcfile name="audio_codec.h" path="/Users/sunqirui/gitlab/aiagent/linx-os-sdk/src/audio/codecs/audio_codec.h"></mcfile>**: 音频编解码器接口，支持多种音频格式的编码和解码。目前主要实现了Opus编解码器。
--   **<mcfile name="wake_word_interface.h" path="/Users/sunqirui/gitlab/aiagent/linx-os-sdk/src/audio/wake_words/wake_word_interface.h"></mcfile>**: 唤醒词检测接口，用于检测关键词（如"你好，小智"、"Hi, ESP"）。支持回调机制和Opus编码输出。
--   **<mcfile name="linx_player.h" path="/Users/sunqirui/gitlab/aiagent/linx-os-sdk/src/audio/play/linx_player.h"></mcfile>**: 音频播放器，提供完整的音频播放功能，包括状态管理、缓冲区管理和线程安全的播放控制。
--   **<mcfile name="opus_codec.h" path="/Users/sunqirui/gitlab/aiagent/linx-os-sdk/src/audio/codecs/opus_codec.h"></mcfile>**: Opus编解码器实现，提供高压缩比和低延迟的语音编码，适用于语音流传输。
+-   **`audio_interface.h/c`**: 音频接口抽象层，提供统一的音频录制和播放接口。支持多平台实现（PortAudio、ESP32、ALSA等）。
+-   **`audio_codec.h/c`**: 音频编解码器接口，支持多种音频格式的编码和解码。目前主要实现了Opus编解码器。
+-   **`wake_word_interface.h/c`**: 唤醒词检测接口，用于检测关键词（如"你好，小智"、"Hi, ESP"）。支持回调机制和Opus编码输出。
+-   **`linx_player.h/c`**: 音频播放器，提供完整的音频播放功能，包括状态管理、缓冲区管理和线程安全的播放控制。
+-   **`opus_codec.h/c`**: Opus编解码器实现，提供高压缩比和低延迟的语音编码，适用于语音流传输。
+-   **`audio_service.h/c`**: 中央音频服务协调器，负责初始化和管理所有其他音频组件、任务和数据队列。
+-   **`audio_processor.h/c`**: 音频处理器，对麦克风输入流进行实时音频处理，包括声学回声消除（AEC）、噪声抑制和语音活动检测（VAD）。
+-   **`audio_packet_queue.h/c`**: 音频数据包队列管理，提供线程安全的音频数据缓冲机制。
+-   **`audio_task_queue.h/c`**: 音频任务队列管理，用于协调不同音频处理任务的执行。
+-   **`timestamp_queue.h/c`**: 时间戳队列管理，用于音频数据的时序同步。
 
-### 待实现组件
-
--   **`AudioService`**: 中央协调器，负责初始化和管理所有其他音频组件、任务和数据队列。
--   **`AudioProcessor`**: 对麦克风输入流进行实时音频处理，通常包括声学回声消除（AEC）、噪声抑制和语音活动检测（VAD）。
--   **`VAD模块`**: 语音活动检测模块，用于检测音频流中的语音活动。
--   **`OpusResampler`**: 用于在不同采样率之间转换音频流的工具（例如，从编解码器的原生采样率重采样到处理所需的16kHz）。
 
 ## 线程模型
 

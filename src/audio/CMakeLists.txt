@@ -22,10 +22,11 @@ include_directories(
 
 # Collect all source files from subdirectories automatically (excluding test directories)
 file(GLOB LINX_AUDIO_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/audio/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/codecs/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/play/*.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/vad/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/processor/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/wake_words/*.c"
 )
 
@@ -99,6 +100,15 @@ install(TARGETS ${LINX_AUDIO_TARGET}
 )
 
 # Install header files with proper directory structure
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio_service.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio_processor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio_packet_queue.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio_task_queue.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/timestamp_queue.h
+    DESTINATION include/linx_audio
+)
+
 install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/audio/audio_interface.h
     ${CMAKE_CURRENT_SOURCE_DIR}/audio/audio_stub.h
