@@ -31,7 +31,10 @@
 #ifdef __APPLE__
 #include "../../../board/mac/common/audio/audio/portaudio_mac.h"
 #include "../../../board/mac/common/audio/processor/audio_processor_mac.h"
-// 注意：使用标准的唤醒词接口，而不是平台特定的实现
+// 只在有 Porcupine 库时才包含 Porcupine 头文件
+#ifdef HAVE_PORCUPINE
+#include "../../../board/mac/common/audio/wake_words/wake_word_porcupine.h"
+#endif
 #endif
 
 #include <stdio.h>
@@ -228,28 +231,82 @@ AudioProcessor* create_mac_audio_processor() {
  * @brief 创建Mac平台唤醒词接口
  */
 WakeWordInterface* create_mac_wake_word_interface() {
+#ifdef HAVE_PORCUPINE
     // 检查是否设置了Picovoice访问密钥
     const char* access_key = getenv("PICOVOICE_ACCESS_KEY");
     if (!access_key) {
         LINX_LOGW(DEMO_TAG, "未设置PICOVOICE_ACCESS_KEY环境变量");
         LINX_LOGW(DEMO_TAG, "唤醒词功能需要有效的Picovoice访问密钥");
         LINX_LOGW(DEMO_TAG, "请访问 https://picovoice.ai/ 获取访问密钥");
+        LINX_LOGW(DEMO_TAG, "将使用模拟唤醒词接口");
         return NULL;
     }
     
-    // 在实际实现中，这里应该调用平台特定的唤醒词创建函数
-    // 例如：wake_word_porcupine_create()
-    // 为了演示目的，我们创建一个简单的模拟接口
+    // 配置Porcupine唤醒词
+    porcupine_config_t config;
+    memset(&config, 0, sizeof(config));
     
-    LINX_LOGW(DEMO_TAG, "唤醒词功能暂时使用模拟实现");
+    // 设置默认配置
+    if (porcupine_config_set_default(&config, access_key) != 0) {
+        LINX_LOGE(DEMO_TAG, "设置Porcupine默认配置失败");
+        return NULL;
+    }
+    
+    // 添加默认唤醒词 "porcupine"
+    char* keyword_path = porcupine_get_default_keyword_path("porcupine");
+    if (keyword_path) {
+        if (porcupine_config_add_keyword(&config, keyword_path, 0.5f) != 0) {
+            LINX_LOGW(DEMO_TAG, "添加默认唤醒词失败，将使用空配置");
+        } else {
+            LINX_LOGI(DEMO_TAG, "添加唤醒词: porcupine (敏感度: 0.5)");
+        }
+        free(keyword_path);
+    }
+    
+    // 尝试添加其他常用唤醒词
+    const char* keywords[] = {"picovoice", "bumblebee", "alexa", "hey google"};
+    const float sensitivities[] = {0.5f, 0.5f, 0.5f, 0.5f};
+    
+    for (int i = 0; i < 4; i++) {
+        char* kw_path = porcupine_get_default_keyword_path(keywords[i]);
+        if (kw_path) {
+            if (porcupine_config_add_keyword(&config, kw_path, sensitivities[i]) == 0) {
+                LINX_LOGI(DEMO_TAG, "添加唤醒词: %s (敏感度: %.1f)", keywords[i], sensitivities[i]);
+            }
+            free(kw_path);
+        }
+    }
+    
+    // 创建Porcupine唤醒词接口
+    WakeWordInterface* interface = wake_word_porcupine_create(&config);
+    if (!interface) {
+        LINX_LOGE(DEMO_TAG, "创建Porcupine唤醒词接口失败");
+        LINX_LOGE(DEMO_TAG, "可能的原因：");
+        LINX_LOGE(DEMO_TAG, "1. 访问密钥无效");
+        LINX_LOGE(DEMO_TAG, "2. 唤醒词文件不存在");
+        LINX_LOGE(DEMO_TAG, "3. Porcupine库未正确安装");
+        porcupine_config_destroy(&config);
+        return NULL;
+    }
+    
+    // 清理配置
+    porcupine_config_destroy(&config);
+    
+    LINX_LOGI(DEMO_TAG, "✅ 创建Porcupine唤醒词接口成功");
+    LINX_LOGI(DEMO_TAG, "支持的唤醒词: porcupine, picovoice, bumblebee, alexa, hey google");
+    return interface;
+#else
+    // Porcupine 库不可用时的处理
+    LINX_LOGW(DEMO_TAG, "Porcupine库未安装或未找到");
+    LINX_LOGW(DEMO_TAG, "唤醒词功能将使用模拟实现");
     LINX_LOGW(DEMO_TAG, "要启用真实的Porcupine唤醒词检测，请：");
-    LINX_LOGW(DEMO_TAG, "1. 确保已安装Picovoice Porcupine库");
-    LINX_LOGW(DEMO_TAG, "2. 在编译时链接Porcupine库");
-    LINX_LOGW(DEMO_TAG, "3. 取消注释Porcupine特定的代码");
+    LINX_LOGW(DEMO_TAG, "1. 访问 https://picovoice.ai/ 下载并安装Porcupine SDK");
+    LINX_LOGW(DEMO_TAG, "2. 设置PICOVOICE_ACCESS_KEY环境变量");
+    LINX_LOGW(DEMO_TAG, "3. 重新编译项目");
     
-    // 返回NULL表示唤醒词功能不可用
-    // 在完整实现中，这里应该返回真实的WakeWordInterface实例
+    // 返回NULL，将使用标准的唤醒词stub实现
     return NULL;
+#endif
 }
 #endif
 
@@ -644,7 +701,18 @@ int parse_arguments(int argc, char* argv[]) {
 // ============================================================================
 
 int main(int argc, char* argv[]) {
+    // 初始化日志系统
+    log_config_t log_config = LOG_DEFAULT_CONFIG;
+    log_config.level = LOG_LEVEL_DEBUG;  // 默认INFO级别
+    log_config.enable_timestamp = true;
+    log_config.enable_color = true;
+    if (log_init(&log_config) != 0) {
+        LOG_ERROR("日志系统初始化失败");
+        return 0;
+    }
+
     LINX_LOGI(DEMO_TAG, "🎵 AudioService 演示程序启动");
+
     
     // 解析命令行参数
     if (parse_arguments(argc, argv) != 0) {

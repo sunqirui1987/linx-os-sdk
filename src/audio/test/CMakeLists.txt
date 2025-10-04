@@ -13,10 +13,6 @@ endif()
 message(STATUS "Building LINX Audio Test Suite")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
 
-# =============================================================================
-# Compiler flags
-# =============================================================================
-
 # Common compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DDEBUG")
@@ -27,49 +23,37 @@ if(APPLE)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-deprecated-declarations")
 endif()
 
-# =============================================================================
-# Include directories
-# =============================================================================
-
 # Core audio module includes
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/..                    # audio module root
-    ${CMAKE_CURRENT_SOURCE_DIR}/../audio              # audio interface
-    ${CMAKE_CURRENT_SOURCE_DIR}/../codecs             # audio codecs
-    ${CMAKE_CURRENT_SOURCE_DIR}/../processor          # audio processor
-    ${CMAKE_CURRENT_SOURCE_DIR}/../wake_words         # wake word interface
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../common/log      # logging
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../common          # common utilities
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../audio
+    ${CMAKE_CURRENT_SOURCE_DIR}/../codecs
+    ${CMAKE_CURRENT_SOURCE_DIR}/../processor
+    ${CMAKE_CURRENT_SOURCE_DIR}/../wake_words
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common
 )
 
 # Platform-specific includes
 if(APPLE)
     include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/audio      # PortAudio Mac
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/processor  # Audio Processor Mac
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/wake_words # Wake Words Mac
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/audio
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/processor
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/wake_words
     )
 endif()
 
-# Third-party includes
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../third/opus/include  # Opus codec
-)
-
-# =============================================================================
-# Source files
-# =============================================================================
-
-# Core audio library sources (needed for linking)
+# Core audio library sources
 set(AUDIO_LIB_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../audio_service.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../audio_packet_queue.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../audio_task_queue.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../timestamp_queue.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../audio/audio_interface.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../audio/audio_stub.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../codecs/audio_codec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../codecs/codec_stub.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../processor/audio_processor_stub.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../processor/audio_processor.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../wake_words/wake_word_interface.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../wake_words/wake_word_stub.c
 )
@@ -93,10 +77,6 @@ set(TEST_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/audio_service_demo_mac.c
 )
 
-# =============================================================================
-# Create audio library target
-# =============================================================================
-
 # Create static library for audio components
 add_library(linx_audio_test_lib STATIC 
     ${AUDIO_LIB_SOURCES}
@@ -116,10 +96,6 @@ target_compile_options(linx_audio_test_lib PRIVATE
     -Wno-unused-function
 )
 
-# =============================================================================
-# Create test executables
-# =============================================================================
-
 # AudioService Demo for Mac
 add_executable(audio_service_demo_mac ${TEST_SOURCES})
 
@@ -127,6 +103,60 @@ add_executable(audio_service_demo_mac ${TEST_SOURCES})
 target_link_libraries(audio_service_demo_mac 
     linx_audio_test_lib
 )
+
+# Find required libraries first
+if(APPLE)
+    # Try to find and link PortAudio
+    find_library(PORTAUDIO_LIBRARY portaudio)
+    if(PORTAUDIO_LIBRARY)
+        message(STATUS "Found PortAudio: ${PORTAUDIO_LIBRARY}")
+    else()
+        message(WARNING "PortAudio not found. Real audio functionality may not work.")
+        message(STATUS "To install PortAudio: brew install portaudio")
+    endif()
+    
+    # Try to find and link Porcupine (optional)
+    # Look for Porcupine in common installation paths
+    find_library(PORCUPINE_LIBRARY 
+        NAMES pv_porcupine libpv_porcupine
+        PATHS
+            /usr/local/lib
+            /opt/homebrew/lib
+            ${CMAKE_SOURCE_DIR}/third_party/porcupine/lib
+            $ENV{PORCUPINE_ROOT}/lib
+        NO_DEFAULT_PATH
+    )
+    
+    # If not found in specific paths, try system paths
+    if(NOT PORCUPINE_LIBRARY)
+        find_library(PORCUPINE_LIBRARY 
+            NAMES pv_porcupine libpv_porcupine
+        )
+    endif()
+    
+    if(PORCUPINE_LIBRARY)
+        message(STATUS "Found Porcupine: ${PORCUPINE_LIBRARY}")
+        # Also look for Porcupine headers
+        find_path(PORCUPINE_INCLUDE_DIR 
+            NAMES pv_porcupine.h
+            PATHS
+                /usr/local/include
+                /opt/homebrew/include
+                ${CMAKE_SOURCE_DIR}/third_party/porcupine/include
+                $ENV{PORCUPINE_ROOT}/include
+        )
+        if(PORCUPINE_INCLUDE_DIR)
+            message(STATUS "Found Porcupine headers: ${PORCUPINE_INCLUDE_DIR}")
+        endif()
+    else()
+        message(STATUS "Porcupine not found. Wake word functionality will use stub implementation.")
+        message(STATUS "To install Porcupine:")
+        message(STATUS "  1. Visit https://picovoice.ai/")
+        message(STATUS "  2. Download and install Porcupine SDK")
+        message(STATUS "  3. Set PICOVOICE_ACCESS_KEY environment variable")
+        message(STATUS "  4. Or set PORCUPINE_ROOT environment variable to Porcupine installation path")
+    endif()
+endif()
 
 # Platform-specific linking
 if(APPLE)
@@ -138,23 +168,18 @@ if(APPLE)
         "-framework Foundation"
     )
     
-    # Try to find and link PortAudio
-    find_library(PORTAUDIO_LIBRARY portaudio)
+    # Link PortAudio if found
     if(PORTAUDIO_LIBRARY)
         target_link_libraries(audio_service_demo_mac ${PORTAUDIO_LIBRARY})
-        message(STATUS "Found PortAudio: ${PORTAUDIO_LIBRARY}")
-    else()
-        message(WARNING "PortAudio not found. Real audio functionality may not work.")
     endif()
     
-    # Try to find and link Porcupine (optional)
-    find_library(PORCUPINE_LIBRARY pv_porcupine)
+    # Link Porcupine if found
     if(PORCUPINE_LIBRARY)
         target_link_libraries(audio_service_demo_mac ${PORCUPINE_LIBRARY})
         target_compile_definitions(audio_service_demo_mac PRIVATE HAVE_PORCUPINE=1)
-        message(STATUS "Found Porcupine: ${PORCUPINE_LIBRARY}")
-    else()
-        message(STATUS "Porcupine not found. Wake word functionality will use stub implementation.")
+        if(PORCUPINE_INCLUDE_DIR)
+            target_include_directories(audio_service_demo_mac PRIVATE ${PORCUPINE_INCLUDE_DIR})
+        endif()
     endif()
     
 elseif(UNIX)
@@ -162,7 +187,7 @@ elseif(UNIX)
     target_link_libraries(audio_service_demo_mac
         pthread
         m
-        asound  # ALSA
+        asound
     )
 endif()
 
@@ -171,10 +196,6 @@ set_target_properties(audio_service_demo_mac PROPERTIES
     OUTPUT_NAME "audio_service_demo_mac"
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
-
-# =============================================================================
-# Additional test targets (optional)
-# =============================================================================
 
 # Create a simple audio test
 add_executable(audio_simple_test 
@@ -190,10 +211,28 @@ target_compile_definitions(audio_simple_test PRIVATE
 )
 
 if(APPLE)
+    # macOS frameworks and libraries
     target_link_libraries(audio_simple_test
         "-framework AudioToolbox"
         "-framework CoreAudio"
+        "-framework AudioUnit"
+        "-framework Foundation"
     )
+    
+    # Link PortAudio if found
+    if(PORTAUDIO_LIBRARY)
+        target_link_libraries(audio_simple_test ${PORTAUDIO_LIBRARY})
+    endif()
+    
+    # Link Porcupine if found
+    if(PORCUPINE_LIBRARY)
+        target_link_libraries(audio_simple_test ${PORCUPINE_LIBRARY})
+        target_compile_definitions(audio_simple_test PRIVATE HAVE_PORCUPINE=1)
+        if(PORCUPINE_INCLUDE_DIR)
+            target_include_directories(audio_simple_test PRIVATE ${PORCUPINE_INCLUDE_DIR})
+        endif()
+    endif()
+    
 elseif(UNIX)
     target_link_libraries(audio_simple_test pthread m)
 endif()
@@ -202,10 +241,6 @@ set_target_properties(audio_simple_test PROPERTIES
     OUTPUT_NAME "audio_simple_test"
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
-
-# =============================================================================
-# Install rules
-# =============================================================================
 
 # Install test executables
 install(TARGETS audio_service_demo_mac audio_simple_test
@@ -218,24 +253,12 @@ install(FILES
     DESTINATION share/doc/linx_audio_test
 )
 
-# =============================================================================
-# Custom targets and commands
-# =============================================================================
-
 # Create a target to run the basic test
 add_custom_target(run_basic_test
     COMMAND ${CMAKE_BINARY_DIR}/bin/audio_service_demo_mac --mode basic --duration 5
     DEPENDS audio_service_demo_mac
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Running basic audio service test"
-)
-
-# Create a target to run the simple test
-add_custom_target(run_simple_test
-    COMMAND ${CMAKE_BINARY_DIR}/bin/audio_simple_test --help
-    DEPENDS audio_simple_test
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running simple audio test"
 )
 
 # Create a target to show test help
@@ -246,25 +269,11 @@ add_custom_target(test_help
     COMMENT "Showing audio service demo help"
 )
 
-# =============================================================================
-# Build information
-# =============================================================================
-
 message(STATUS "Audio Test Configuration:")
 message(STATUS "  - Main demo: audio_service_demo_mac")
 message(STATUS "  - Simple test: audio_simple_test")
 message(STATUS "  - Output directory: ${CMAKE_BINARY_DIR}/bin")
 message(STATUS "  - Library directory: ${CMAKE_BINARY_DIR}/lib")
-
-# Print available custom targets
-message(STATUS "Available custom targets:")
-message(STATUS "  - make run_basic_test    : Run basic audio service test")
-message(STATUS "  - make run_simple_test   : Run simple audio test")
-message(STATUS "  - make test_help         : Show demo help")
-
-# =============================================================================
-# Platform-specific messages
-# =============================================================================
 
 if(APPLE)
     message(STATUS "macOS Build Configuration:")
