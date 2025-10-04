@@ -75,6 +75,21 @@
         "stdexcept": "cpp",
         "atomic": "cpp",
         "__tree": "cpp",
-        "audio_processor.h": "c"
+        "audio_processor.h": "c",
+        "chrono": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "condition_variable": "cpp",
+        "execution": "cpp",
+        "filesystem": "cpp",
+        "format": "cpp",
+        "forward_list": "cpp",
+        "fstream": "cpp",
+        "iomanip": "cpp",
+        "list": "cpp",
+        "map": "cpp",
+        "mutex": "cpp",
+        "regex": "cpp",
+        "system_error": "cpp"
     }
 }

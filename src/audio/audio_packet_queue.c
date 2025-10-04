@@ -221,3 +221,50 @@ void audio_packet_queue_clear(AudioPacketQueue* queue) {
     
     LINX_LOGI(AUDIO_PACKET_QUEUE_TAG, "队列清空完成，销毁了%zu个数据包", cleared_count);
 }
+
+bool audio_stream_packet_set_data(AudioStreamPacket* packet, const void* data, size_t size, const audio_format_t* format) {
+    if (!packet || !data || size == 0 || !format) {
+        LINX_LOGE(AUDIO_PACKET_QUEUE_TAG, "设置数据包数据失败：无效参数");
+        return false;
+    }
+    
+    if (size > packet->payload_capacity) {
+        uint8_t* new_payload = (uint8_t*)realloc(packet->payload, size);
+        if (!new_payload) {
+            LINX_LOGE(AUDIO_PACKET_QUEUE_TAG, "设置数据包数据失败：内存重分配失败，目标大小：%zu", size);
+            return false;
+        }
+        packet->payload = new_payload;
+        packet->payload_capacity = size;
+    }
+    
+    memcpy(packet->payload, data, size);
+    packet->payload_size = size;
+    packet->sample_rate = format->sample_rate;
+    packet->frame_duration = format->frame_size_ms;
+    
+    LINX_LOGD(AUDIO_PACKET_QUEUE_TAG, "数据包数据设置成功，大小：%zu字节，采样率：%d，帧时长：%dms", 
+              size, format->sample_rate, format->frame_size_ms);
+    return true;
+}
+
+bool audio_stream_packet_get_data(const AudioStreamPacket* packet, const void** data, size_t* size, audio_format_t* format) {
+    if (!packet || !data || !size) {
+        LINX_LOGE(AUDIO_PACKET_QUEUE_TAG, "获取数据包数据失败：无效参数");
+        return false;
+    }
+    
+    *data = packet->payload;
+    *size = packet->payload_size;
+    
+    if (format) {
+        // 从数据包中重建格式信息
+        format->sample_rate = packet->sample_rate;
+        format->frame_size_ms = packet->frame_duration;
+        format->channels = 1;  // 默认单声道
+        format->bits_per_sample = 16;  // 默认16位
+    }
+    
+    LINX_LOGD(AUDIO_PACKET_QUEUE_TAG, "数据包数据获取成功，大小：%zu字节", *size);
+    return true;
+}

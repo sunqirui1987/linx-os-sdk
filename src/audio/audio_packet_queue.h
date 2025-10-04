@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "codecs/audio_codec.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,6 +72,26 @@ void audio_stream_packet_reset(AudioStreamPacket* packet);
  * @return 0成功，负数失败
  */
 int audio_stream_packet_resize(AudioStreamPacket* packet, size_t new_capacity);
+
+/**
+ * @brief 设置数据包数据
+ * @param packet 数据包实例
+ * @param data 音频数据
+ * @param size 数据大小
+ * @param format 音频格式
+ * @return 成功返回true，失败返回false
+ */
+bool audio_stream_packet_set_data(AudioStreamPacket* packet, const void* data, size_t size, const audio_format_t* format);
+
+/**
+ * @brief 获取数据包数据
+ * @param packet 数据包实例
+ * @param data 输出数据指针
+ * @param size 输出数据大小
+ * @param format 输出音频格式（可选）
+ * @return 成功返回true，失败返回false
+ */
+bool audio_stream_packet_get_data(const AudioStreamPacket* packet, const void** data, size_t* size, audio_format_t* format);
 
 // 音频数据包队列操作函数
 

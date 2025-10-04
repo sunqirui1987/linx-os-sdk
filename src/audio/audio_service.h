@@ -25,16 +25,22 @@ extern "C" {
  * @details 提供音频录制、播放、编解码、唤醒词检测等功能的统一服务接口
  */
 
+// ============================================================================
 // 常量定义
+// ============================================================================
+
+// 音频参数常量
 #define OPUS_FRAME_DURATION_MS 60                                      /**< Opus帧持续时间（毫秒） */
+#define AUDIO_TESTING_MAX_DURATION_MS 10000                             /**< 音频测试最大持续时间（毫秒） */
+#define AUDIO_POWER_TIMEOUT_MS 15000                                    /**< 音频功率超时时间（毫秒） */
+#define AUDIO_POWER_CHECK_INTERVAL_MS 1000                              /**< 音频功率检查间隔（毫秒） */
+
+// 队列容量常量
 #define MAX_ENCODE_TASKS_IN_QUEUE 2                                     /**< 编码任务队列最大容量 */
 #define MAX_PLAYBACK_TASKS_IN_QUEUE 2                                   /**< 播放任务队列最大容量 */
 #define MAX_DECODE_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)     /**< 解码数据包队列最大容量 */
 #define MAX_SEND_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)       /**< 发送数据包队列最大容量 */
-#define AUDIO_TESTING_MAX_DURATION_MS 10000                             /**< 音频测试最大持续时间（毫秒） */
 #define MAX_TIMESTAMPS_IN_QUEUE 3                                       /**< 时间戳队列最大容量 */
-#define AUDIO_POWER_TIMEOUT_MS 15000                                    /**< 音频功率超时时间（毫秒） */
-#define AUDIO_POWER_CHECK_INTERVAL_MS 1000                              /**< 音频功率检查间隔（毫秒） */
 
 // 事件位定义
 #define AS_EVENT_AUDIO_TESTING_RUNNING      (1 << 0)                    /**< 音频测试运行中事件位 */
@@ -42,10 +48,23 @@ extern "C" {
 #define AS_EVENT_AUDIO_PROCESSOR_RUNNING    (1 << 2)                    /**< 音频处理器运行中事件位 */
 #define AS_EVENT_PLAYBACK_NOT_EMPTY         (1 << 3)                    /**< 播放队列非空事件位 */
 
-// 前向声明
+// 组件名称常量
+#define COMPONENT_WAKE_WORD         "wake_word"                         /**< 唤醒词组件名称 */
+#define COMPONENT_AUDIO_PROCESSOR   "audio_processor"                   /**< 音频处理器组件名称 */
+#define COMPONENT_AUDIO_INTERFACE   "audio_interface"                   /**< 音频接口组件名称 */
+#define COMPONENT_OPUS_ENCODER      "opus_encoder"                      /**< Opus编码器组件名称 */
+#define COMPONENT_OPUS_DECODER      "opus_decoder"                      /**< Opus解码器组件名称 */
+
+// ============================================================================
+// 前向声明和类型定义
+// ============================================================================
+
 typedef struct AudioService AudioService;
 
+// ============================================================================
 // 回调函数类型定义
+// ============================================================================
+
 /**
  * @brief 发送队列可用回调函数类型
  * @param user_data 用户数据指针
@@ -72,6 +91,10 @@ typedef void (*audio_service_vad_callback_t)(bool speaking, void* user_data);
  */
 typedef void (*audio_service_testing_queue_full_callback_t)(void* user_data);
 
+// ============================================================================
+// 结构体定义
+// ============================================================================
+
 /**
  * @brief 音频服务回调函数结构体
  * @details 包含音频服务各种事件的回调函数指针
@@ -83,6 +106,30 @@ typedef struct {
     audio_service_testing_queue_full_callback_t on_audio_testing_queue_full; /**< 音频测试队列满回调 */
     void* user_data;                                                    /**< 用户数据指针 */
 } AudioServiceCallbacks;
+
+/**
+ * @brief 音频服务功能配置结构体
+ * @details 统一管理所有音频功能的启用状态
+ */
+typedef struct {
+    bool wake_word_detection;           /**< 唤醒词检测 */
+    bool voice_processing;              /**< 语音处理 */
+    bool audio_testing;                 /**< 音频测试 */
+    bool device_aec;                    /**< 设备AEC */
+    bool noise_suppression;             /**< 噪声抑制 */
+    bool voice_activity_detection;      /**< 语音活动检测 */
+} AudioServiceFeatures;
+
+/**
+ * @brief 音频服务配置结构体
+ * @details 音频服务的初始化配置参数
+ */
+typedef struct {
+    audio_format_t input_format;        /**< 输入音频格式 */
+    audio_format_t output_format;       /**< 输出音频格式 */
+    AudioServiceFeatures features;      /**< 功能配置 */
+    void* models_list;                  /**< 模型列表指针 */
+} AudioServiceConfig;
 
 /**
  * @brief 调试统计信息结构体
@@ -102,12 +149,14 @@ typedef struct {
 struct AudioService {
     // 核心组件
     audio_codec_t* codec;                   /**< 主音频编解码器 */
+    AudioInterface* audio_interface;        /**< 音频接口 */
     AudioProcessor* audio_processor;        /**< 音频处理器 */
     WakeWordInterface* wake_word;           /**< 唤醒词检测接口 */
     audio_codec_t* opus_encoder;            /**< Opus编码器 */
     audio_codec_t* opus_decoder;            /**< Opus解码器 */
     
-    // 回调函数
+    // 配置和回调
+    AudioServiceConfig config;              /**< 服务配置 */
     AudioServiceCallbacks callbacks;        /**< 回调函数集合 */
     
     // 线程管理
@@ -128,11 +177,12 @@ struct AudioService {
     TimestampQueue timestamp_queue;         /**< 时间戳队列 */
     
     // 状态标志
-    bool wake_word_initialized;             /**< 唤醒词检测是否已初始化 */
-    bool audio_processor_initialized;       /**< 音频处理器是否已初始化 */
     bool voice_detected;                    /**< 是否检测到语音 */
     bool service_stopped;                   /**< 服务是否已停止 */
     bool audio_input_need_warmup;           /**< 音频输入是否需要预热 */
+    
+    // 功能状态
+    AudioServiceFeatures current_features;  /**< 当前功能配置状态 */
     
     // 时间管理
     struct timespec last_input_time;        /**< 最后输入时间 */
@@ -140,21 +190,27 @@ struct AudioService {
     
     // 调试信息
     DebugStatistics debug_statistics;       /**< 调试统计信息 */
-    
-    // 模型管理
-    void* models_list;                      /**< 模型列表指针 */
 };
 
-// 音频服务API函数
+// ============================================================================
+// 核心生命周期管理接口
+// ============================================================================
 
 /**
  * @brief 创建新的音频服务实例
+ * @param config 可选的配置参数，NULL表示使用默认配置
  * @return 音频服务指针，失败时返回NULL
  */
-AudioService* audio_service_create(void);
+AudioService* audio_service_create(const AudioServiceConfig* config);
 
 /**
- * @brief 使用音频编解码器初始化音频服务
+ * @brief 销毁音频服务并释放资源
+ * @param service 音频服务实例
+ */
+void audio_service_destroy(AudioService* service);
+
+/**
+ * @brief 初始化音频服务
  * @param service 音频服务实例
  * @param codec 要使用的音频编解码器
  * @return 成功返回0，失败返回负数
@@ -174,11 +230,53 @@ int audio_service_start(AudioService* service);
  */
 void audio_service_stop(AudioService* service);
 
+// ============================================================================
+// 组件管理接口
+// ============================================================================
+
 /**
- * @brief 销毁音频服务并释放资源
+ * @brief 设置音频服务的平台特定组件
  * @param service 音频服务实例
+ * @param audio_interface 音频接口实现
+ * @param audio_processor 音频处理器实现
+ * @param wake_word_interface 唤醒词接口实现
+ * @param opus_encoder Opus编码器实例
+ * @param opus_decoder Opus解码器实例
  */
-void audio_service_destroy(AudioService* service);
+void audio_service_set_components(AudioService* service,
+                                 AudioInterface* audio_interface,
+                                 AudioProcessor* audio_processor,
+                                 WakeWordInterface* wake_word_interface,
+                                 audio_codec_t* opus_encoder,
+                                 audio_codec_t* opus_decoder);
+
+/**
+ * @brief 检查组件是否已设置且可用
+ * @param service 音频服务实例
+ * @param component_type 组件类型，使用 COMPONENT_* 宏定义
+ * @return 组件可用返回true，否则返回false
+ */
+bool audio_service_is_component_ready(const AudioService* service, const char* component_type);
+
+// ============================================================================
+// 功能配置接口
+// ============================================================================
+
+/**
+ * @brief 统一配置音频服务功能
+ * @param service 音频服务实例
+ * @param features 功能配置结构体
+ * @return 成功返回0，失败返回负数
+ */
+int audio_service_configure_features(AudioService* service, const AudioServiceFeatures* features);
+
+/**
+ * @brief 获取当前功能配置
+ * @param service 音频服务实例
+ * @param features 输出功能配置结构体
+ * @return 成功返回0，失败返回负数
+ */
+int audio_service_get_features(const AudioService* service, AudioServiceFeatures* features);
 
 /**
  * @brief 设置音频服务事件回调函数
@@ -188,32 +286,16 @@ void audio_service_destroy(AudioService* service);
 void audio_service_set_callbacks(AudioService* service, const AudioServiceCallbacks* callbacks);
 
 /**
- * @brief 启用或禁用唤醒词检测
- * @param service 音频服务实例
- * @param enable true表示启用，false表示禁用
+ * @brief 初始化音频服务配置为默认值
+ * @param config 配置结构体指针
  */
-void audio_service_enable_wake_word_detection(AudioService* service, bool enable);
+void audio_service_config_init_default(AudioServiceConfig* config);
 
-/**
- * @brief 启用或禁用语音处理
- * @param service 音频服务实例
- * @param enable true表示启用，false表示禁用
- */
-void audio_service_enable_voice_processing(AudioService* service, bool enable);
 
-/**
- * @brief 启用或禁用音频测试
- * @param service 音频服务实例
- * @param enable true表示启用，false表示禁用
- */
-void audio_service_enable_audio_testing(AudioService* service, bool enable);
 
-/**
- * @brief 启用或禁用设备AEC（声学回声消除）
- * @param service 音频服务实例
- * @param enable true表示启用，false表示禁用
- */
-void audio_service_enable_device_aec(AudioService* service, bool enable);
+// ============================================================================
+// 数据处理接口
+// ============================================================================
 
 /**
  * @brief 将音频数据包推送到解码队列
@@ -232,24 +314,16 @@ bool audio_service_push_packet_to_decode_queue(AudioService* service, AudioStrea
 AudioStreamPacket* audio_service_pop_packet_from_send_queue(AudioService* service);
 
 /**
- * @brief 编码唤醒词数据
+ * @brief 播放音频数据
  * @param service 音频服务实例
+ * @param sound_data 音频数据
+ * @param sound_size 音频数据大小
  */
-void audio_service_encode_wake_word(AudioService* service);
+void audio_service_play_sound(AudioService* service, const uint8_t* sound_data, size_t sound_size);
 
-/**
- * @brief 弹出唤醒词数据包
- * @param service 音频服务实例
- * @return 唤醒词数据包指针，无可用数据时返回NULL
- */
-AudioStreamPacket* audio_service_pop_wake_word_packet(AudioService* service);
-
-/**
- * @brief 获取最后检测到的唤醒词
- * @param service 音频服务实例
- * @return 唤醒词字符串，无唤醒词时返回NULL
- */
-const char* audio_service_get_last_wake_word(AudioService* service);
+// ============================================================================
+// 状态查询接口
+// ============================================================================
 
 /**
  * @brief 检查当前是否检测到语音
@@ -265,64 +339,8 @@ bool audio_service_is_voice_detected(const AudioService* service);
  */
 bool audio_service_is_idle(const AudioService* service);
 
-/**
- * @brief 检查唤醒词检测是否正在运行
- * @param service 音频服务实例
- * @return 正在运行返回true，否则返回false
- */
-bool audio_service_is_wake_word_running(const AudioService* service);
 
-/**
- * @brief 检查音频处理器是否正在运行
- * @param service 音频服务实例
- * @return 正在运行返回true，否则返回false
- */
-bool audio_service_is_audio_processor_running(const AudioService* service);
 
-/**
- * @brief 播放OGG格式的音频数据
- * @param service 音频服务实例
- * @param ogg_data OGG音频数据
- * @param ogg_size OGG数据大小
- */
-void audio_service_play_sound(AudioService* service, const uint8_t* ogg_data, size_t ogg_size);
-
-/**
- * @brief 读取音频数据
- * @param service 音频服务实例
- * @param data 存储音频数据的缓冲区
- * @param sample_rate 期望的采样率
- * @param samples 要读取的样本数
- * @return 成功返回true，失败返回false
- */
-bool audio_service_read_audio_data(AudioService* service, int16_t* data, int sample_rate, int samples);
-
-/**
- * @brief 重置音频解码器
- * @param service 音频服务实例
- */
-void audio_service_reset_decoder(AudioService* service);
-
-/**
- * @brief 设置服务的模型列表
- * @param service 音频服务实例
- * @param models_list 模型列表指针
- */
-void audio_service_set_models_list(AudioService* service, void* models_list);
-
-// 工具函数用于数据包和任务管理
-
-/**
- * @brief 创建音频流数据包
- * @return 新数据包指针，失败时返回NULL
- */
-AudioStreamPacket* audio_stream_packet_create(void);
-
-/**
- * @brief 销毁音频流数据包
- * @param packet 要销毁的数据包
- */
-void audio_stream_packet_destroy(AudioStreamPacket* packet);
 
 
 

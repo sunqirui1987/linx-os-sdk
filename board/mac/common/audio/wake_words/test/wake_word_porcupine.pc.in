@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: wake_word_porcupine
+Description: Mac Wake Word Detection using Porcupine
+Version: @PROJECT_VERSION@
+Requires: 
+Libs: -L${libdir} -lwake_word_porcupine -lpv_porcupine -lpthread
+Cflags: -I${includedir}/wake_words
