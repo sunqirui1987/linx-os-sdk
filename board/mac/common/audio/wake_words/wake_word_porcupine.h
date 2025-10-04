@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <pthread.h>
+#include "wake_words/wake_word_interface.h"
 
 // 条件包含Porcupine头文件
 #ifdef __APPLE__
@@ -39,49 +40,7 @@
     #endif
 #endif
 
-// 前向声明和基本类型定义
-typedef struct WakeWordInterface WakeWordInterface;
-typedef struct audio_codec audio_codec_t;
-typedef void (*wake_word_callback_t)(const char* wake_word, void* user_data);
-
-// 虚函数表定义
-typedef struct {
-    int (*initialize)(WakeWordInterface* self, audio_codec_t* codec, void* user_data);
-    void (*feed)(WakeWordInterface* self, const int16_t* data, size_t size);
-    void (*set_callback)(WakeWordInterface* self, wake_word_callback_t callback, void* user_data);
-    void (*start)(WakeWordInterface* self);
-    void (*stop)(WakeWordInterface* self);
-    size_t (*get_feed_size)(WakeWordInterface* self);
-    void (*encode_wake_word_data)(WakeWordInterface* self);
-    bool (*get_wake_word_opus)(WakeWordInterface* self, uint8_t* opus_data, size_t buffer_size, size_t* encoded_size);
-    const char* (*get_last_detected_wake_word)(WakeWordInterface* self);
-    void (*destroy)(WakeWordInterface* self);
-} WakeWordInterfaceVTable;
-
-// 基础接口结构体
-struct WakeWordInterface {
-    const WakeWordInterfaceVTable* vtable;
-    void* impl_data;
-    
-    // 配置信息
-    audio_codec_t* codec;
-    void* user_data;
-    
-    // 回调信息
-    wake_word_callback_t callback;
-    void* callback_user_data;
-    
-    // 状态信息
-    bool is_initialized;
-    bool is_running;
-    char* last_detected_wake_word;
-    size_t feed_size;
-    
-    // Opus编码缓冲区
-    uint8_t* opus_buffer;
-    size_t opus_buffer_size;
-    size_t opus_data_size;
-};
+// 注意：WakeWordInterface 和相关类型已经在 wake_word_interface.h 中定义
 
 #ifdef __cplusplus
 extern "C" {

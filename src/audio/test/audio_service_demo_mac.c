@@ -25,6 +25,8 @@
 
 #include "../audio_service.h"
 #include "../audio_packet_queue.h"
+#include "../processor/audio_processor.h"
+#include "../codecs/opus_codec.h"
 #include "../../common/log/linx_log.h"
 
 // Mac平台特定组件 (条件编译)
@@ -80,7 +82,7 @@ static WakeWordInterface* g_wake_word_interface = NULL;
 static audio_codec_t* g_opus_encoder = NULL;
 static audio_codec_t* g_opus_decoder = NULL;
 static bool g_demo_running = false;
-static bool g_use_real_audio = false;
+static bool g_use_real_audio = true;  // 默认启用真实音频
 static bool g_enable_wakeword = true;  // 默认启用唤醒词
 static DemoMode g_demo_mode = DEMO_MODE_BASIC;
 static int g_duration_sec = DEFAULT_DURATION_SEC;
@@ -120,15 +122,25 @@ void on_send_queue_available(void* user_data) {
     AudioStreamPacket* packet = audio_service_pop_packet_from_send_queue(g_audio_service);
     if (packet) {
         g_stats.packets_sent++;
-        LINX_LOGI(DEMO_TAG, "获取到编码数据包，大小: %zu 字节 (总计: %u)", 
-                  packet->payload_size, g_stats.packets_sent);
+        
+        if (g_use_real_audio) {
+            LINX_LOGI(DEMO_TAG, "🎤 录制到音频数据包，大小: %zu 字节 (总计: %u)", 
+                      packet->payload_size, g_stats.packets_sent);
+        } else {
+            LINX_LOGI(DEMO_TAG, "📊 生成模拟音频数据包，大小: %zu 字节 (总计: %u)", 
+                      packet->payload_size, g_stats.packets_sent);
+        }
         
         // 在实际应用中，这里会将数据发送到网络
         // 为了演示，我们将数据放回解码队列进行本地回放
         if (g_demo_mode == DEMO_MODE_BASIC || g_demo_mode == DEMO_MODE_FULL) {
             if (audio_service_push_packet_to_decode_queue(g_audio_service, packet, false)) {
                 g_stats.packets_received++;
-                LINX_LOGD(DEMO_TAG, "数据包已放入解码队列进行回放");
+                if (g_use_real_audio) {
+                    LINX_LOGI(DEMO_TAG, "🔊 数据包已放入播放队列，即将播放录制的声音");
+                } else {
+                    LINX_LOGD(DEMO_TAG, "📈 模拟数据包已放入解码队列进行处理");
+                }
             } else {
                 LINX_LOGW(DEMO_TAG, "解码队列已满，丢弃数据包");
                 audio_stream_packet_destroy(packet);
@@ -173,22 +185,21 @@ void on_audio_testing_queue_full(void* user_data) {
 // ============================================================================
 
 /**
- * @brief 创建测试用的音频编解码器
+ * @brief 创建Opus音频编解码器
  */
-audio_codec_t* create_test_codec(bool is_encoder) {
-    // 这里应该创建真实的Opus编解码器
-    // 为了演示，我们创建一个简单的测试编解码器
-    audio_codec_t* codec = (audio_codec_t*)calloc(1, sizeof(audio_codec_t));
+audio_codec_t* create_opus_codec(bool is_encoder) {
+    // 创建真实的Opus编解码器
+    audio_codec_t* codec = opus_codec_create();
     if (!codec) {
+        LINX_LOGE(DEMO_TAG, "创建Opus编解码器失败");
         return NULL;
     }
     
-    // 初始化编解码器配置
-    audio_format_default(&codec->format);
+    // 配置音频格式
     codec->format.sample_rate = SAMPLE_RATE;
     codec->format.channels = CHANNELS;
     
-    LINX_LOGI(DEMO_TAG, "创建%s成功", is_encoder ? "编码器" : "解码器");
+    LINX_LOGI(DEMO_TAG, "创建Opus%s成功", is_encoder ? "编码器" : "解码器");
     return codec;
 }
 
@@ -199,17 +210,24 @@ audio_codec_t* create_test_codec(bool is_encoder) {
 AudioInterface* create_mac_audio_interface() {
     if (!g_use_real_audio) {
         LINX_LOGI(DEMO_TAG, "使用模拟音频接口");
-        return NULL; // 使用模拟音频
+        // 即使在模拟模式下，也创建一个基本的音频接口用于演示
+        // 这里可以创建一个简单的文件音频接口或者内存音频接口
+        return NULL; // 暂时返回NULL，使用AudioService的内置模拟功能
     }
     
     // 创建PortAudio接口
     AudioInterface* interface = portaudio_mac_create();
     if (!interface) {
-        LINX_LOGE(DEMO_TAG, "创建PortAudio接口失败");
+        LINX_LOGE(DEMO_TAG, "创建PortAudio接口失败，回退到模拟音频");
+        LINX_LOGW(DEMO_TAG, "可能的原因：");
+        LINX_LOGW(DEMO_TAG, "1. PortAudio库未正确安装");
+        LINX_LOGW(DEMO_TAG, "2. 音频设备不可用");
+        LINX_LOGW(DEMO_TAG, "3. 权限不足");
+        g_use_real_audio = false;  // 回退到模拟模式
         return NULL;
     }
     
-    LINX_LOGI(DEMO_TAG, "创建PortAudio接口成功");
+    LINX_LOGI(DEMO_TAG, "✅ 创建PortAudio接口成功，将使用真实音频设备");
     return interface;
 }
 
@@ -223,7 +241,21 @@ AudioProcessor* create_mac_audio_processor() {
         return NULL;
     }
     
-    LINX_LOGI(DEMO_TAG, "创建Mac音频处理器成功");
+    // Mac特定的初始化配置
+    audio_processor_config_t processor_config;
+    audio_processor_config_init_default(&processor_config, SAMPLE_RATE, CHANNELS, FRAME_DURATION_MS);
+    processor_config.enable_vad = true;
+    processor_config.enable_aec = true;
+    processor_config.enable_ns = true;
+    
+    // 使用虚函数表调用Mac特定的初始化实现
+    if (processor->vtable->initialize(processor, &processor_config, NULL) != AUDIO_PROCESSOR_SUCCESS) {
+        LINX_LOGE(DEMO_TAG, "初始化Mac音频处理器失败");
+        audio_processor_mac_destroy(processor);
+        return NULL;
+    }
+    
+    LINX_LOGI(DEMO_TAG, "创建并初始化Mac音频处理器成功");
     return processor;
 }
 
@@ -233,7 +265,7 @@ AudioProcessor* create_mac_audio_processor() {
 WakeWordInterface* create_mac_wake_word_interface() {
 #ifdef HAVE_PORCUPINE
     // 检查是否设置了Picovoice访问密钥
-    const char* access_key = getenv("PICOVOICE_ACCESS_KEY");
+    const char* access_key = "/HGzqJBQDPQmbG3ub0eXU0IGI/q3GsHMJZXYMv6RyedhZynYbP7zoQ==";
     if (!access_key) {
         LINX_LOGW(DEMO_TAG, "未设置PICOVOICE_ACCESS_KEY环境变量");
         LINX_LOGW(DEMO_TAG, "唤醒词功能需要有效的Picovoice访问密钥");
@@ -328,7 +360,15 @@ int demo_basic_mode() {
         return -1;
     }
     
-    LINX_LOGI(DEMO_TAG, "基础模式配置完成，开始录制和播放...");
+    if (g_use_real_audio) {
+        LINX_LOGI(DEMO_TAG, "🎤 基础模式配置完成，开始真实音频录制和播放...");
+        LINX_LOGI(DEMO_TAG, "📢 请对着麦克风说话，您的声音将被录制、编码、解码并播放");
+        LINX_LOGI(DEMO_TAG, "🔊 如果听不到声音，请检查音频设备设置和权限");
+    } else {
+        LINX_LOGI(DEMO_TAG, "🎭 基础模式配置完成，使用模拟音频数据进行演示...");
+        LINX_LOGI(DEMO_TAG, "📊 将生成模拟音频数据进行编码解码测试");
+    }
+    
     return 0;
 }
 
@@ -447,8 +487,8 @@ int setup_audio_service() {
     }
 #endif
     
-    g_opus_encoder = create_test_codec(true);
-    g_opus_decoder = create_test_codec(false);
+    g_opus_encoder = create_opus_codec(true);
+    g_opus_decoder = create_opus_codec(false);
     
     if (!g_opus_encoder || !g_opus_decoder) {
         LINX_LOGE(DEMO_TAG, "创建编解码器失败");
@@ -626,7 +666,8 @@ void show_help() {
     printf("                      test     - 音频测试模式\n");
     printf("                      full     - 完整功能演示\n");
     printf("  --duration <sec>  运行时长，秒 (默认: %d)\n", DEFAULT_DURATION_SEC);
-    printf("  --real-audio      使用真实音频设备 (默认: 模拟音频)\n");
+    printf("  --real-audio      强制使用真实音频设备\n");
+    printf("  --no-real-audio   使用模拟音频 (默认: 真实音频)\n");
     printf("  --no-wakeword     禁用唤醒词功能 (默认: 启用)\n");
     printf("  --help           显示此帮助信息\n\n");
     printf("示例:\n");
@@ -646,13 +687,14 @@ int parse_arguments(int argc, char* argv[]) {
         {"mode", required_argument, 0, 'm'},
         {"duration", required_argument, 0, 'd'},
         {"real-audio", no_argument, 0, 'r'},
+        {"no-real-audio", no_argument, 0, 'n'},
         {"no-wakeword", no_argument, 0, 'w'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
     
     int c;
-    while ((c = getopt_long(argc, argv, "m:d:rwh", long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "m:d:rnwh", long_options, NULL)) != -1) {
         switch (c) {
             case 'm':
                 if (strcmp(optarg, "basic") == 0) {
@@ -679,6 +721,9 @@ int parse_arguments(int argc, char* argv[]) {
                 break;
             case 'r':
                 g_use_real_audio = true;
+                break;
+            case 'n':
+                g_use_real_audio = false;
                 break;
             case 'w':
                 g_enable_wakeword = false;

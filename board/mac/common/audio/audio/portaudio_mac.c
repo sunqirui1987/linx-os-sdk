@@ -240,7 +240,12 @@ int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
         pthread_cond_signal(&data->record_cond);
     } else {
         // Buffer overflow - log warning but continue
-        LOG_WARN("Record buffer overflow, dropping %lu samples", samples_to_write);
+        static int overflow_count = 0;
+        overflow_count++;
+        if (overflow_count % 10 == 1) { // 每10次溢出只打印一次日志
+            LOG_WARN("Record buffer overflow #%d, dropping %lu samples (buffer usage: %zu/%zu)", 
+                     overflow_count, samples_to_write, used_space, data->record_buffer_size);
+        }
     }
     
     pthread_mutex_unlock(&data->record_mutex);

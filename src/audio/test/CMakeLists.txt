@@ -32,6 +32,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../wake_words
     ${CMAKE_CURRENT_SOURCE_DIR}/../../common/log
     ${CMAKE_CURRENT_SOURCE_DIR}/../../common
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third/opus/include
 )
 
 # Platform-specific includes
@@ -53,7 +54,9 @@ set(AUDIO_LIB_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../audio/audio_stub.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../codecs/audio_codec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../codecs/codec_stub.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../codecs/opus_codec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../processor/audio_processor.c
+    
     ${CMAKE_CURRENT_SOURCE_DIR}/../wake_words/wake_word_interface.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../wake_words/wake_word_stub.c
 )
@@ -68,8 +71,14 @@ if(APPLE)
     list(APPEND AUDIO_LIB_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/audio/portaudio_mac.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/processor/audio_processor_mac.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/wake_words/wake_word_porcupine.c
     )
+    
+    # Only include Porcupine implementation if library is found
+    if(PORCUPINE_LIBRARY)
+        list(APPEND AUDIO_LIB_SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/wake_words/wake_word_porcupine.c
+        )
+    endif()
 endif()
 
 # Test sources
@@ -114,6 +123,19 @@ if(APPLE)
         message(WARNING "PortAudio not found. Real audio functionality may not work.")
         message(STATUS "To install PortAudio: brew install portaudio")
     endif()
+    
+    # Use project's built-in Opus library
+    set(OPUS_BUILD_SHARED_LIBRARY OFF)
+    set(OPUS_BUILD_TESTING OFF)
+    set(OPUS_BUILD_PROGRAMS OFF)
+    set(OPUS_CUSTOM_MODES OFF)
+    
+    # Add Opus as subdirectory
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third/opus ${CMAKE_BINARY_DIR}/opus)
+    
+    # Set Opus library target
+    set(OPUS_LIBRARY opus)
+    message(STATUS "Using built-in Opus library: ${CMAKE_CURRENT_SOURCE_DIR}/../../third/opus")
     
     # Try to find and link Porcupine (optional)
     # Look for Porcupine in common installation paths
@@ -173,6 +195,9 @@ if(APPLE)
         target_link_libraries(audio_service_demo_mac ${PORTAUDIO_LIBRARY})
     endif()
     
+    # Link built-in Opus library
+    target_link_libraries(audio_service_demo_mac ${OPUS_LIBRARY})
+    
     # Link Porcupine if found
     if(PORCUPINE_LIBRARY)
         target_link_libraries(audio_service_demo_mac ${PORCUPINE_LIBRARY})
@@ -197,53 +222,10 @@ set_target_properties(audio_service_demo_mac PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-# Create a simple audio test
-add_executable(audio_simple_test 
-    ${CMAKE_CURRENT_SOURCE_DIR}/audio_service_demo_mac.c
-)
 
-target_link_libraries(audio_simple_test linx_audio_test_lib)
-
-# Simplified version without platform-specific dependencies
-target_compile_definitions(audio_simple_test PRIVATE 
-    SIMPLE_TEST_MODE=1
-    NO_REAL_AUDIO=1
-)
-
-if(APPLE)
-    # macOS frameworks and libraries
-    target_link_libraries(audio_simple_test
-        "-framework AudioToolbox"
-        "-framework CoreAudio"
-        "-framework AudioUnit"
-        "-framework Foundation"
-    )
-    
-    # Link PortAudio if found
-    if(PORTAUDIO_LIBRARY)
-        target_link_libraries(audio_simple_test ${PORTAUDIO_LIBRARY})
-    endif()
-    
-    # Link Porcupine if found
-    if(PORCUPINE_LIBRARY)
-        target_link_libraries(audio_simple_test ${PORCUPINE_LIBRARY})
-        target_compile_definitions(audio_simple_test PRIVATE HAVE_PORCUPINE=1)
-        if(PORCUPINE_INCLUDE_DIR)
-            target_include_directories(audio_simple_test PRIVATE ${PORCUPINE_INCLUDE_DIR})
-        endif()
-    endif()
-    
-elseif(UNIX)
-    target_link_libraries(audio_simple_test pthread m)
-endif()
-
-set_target_properties(audio_simple_test PROPERTIES
-    OUTPUT_NAME "audio_simple_test"
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-)
 
 # Install test executables
-install(TARGETS audio_service_demo_mac audio_simple_test
+install(TARGETS audio_service_demo_mac
     RUNTIME DESTINATION bin
 )
 
@@ -271,13 +253,13 @@ add_custom_target(test_help
 
 message(STATUS "Audio Test Configuration:")
 message(STATUS "  - Main demo: audio_service_demo_mac")
-message(STATUS "  - Simple test: audio_simple_test")
 message(STATUS "  - Output directory: ${CMAKE_BINARY_DIR}/bin")
 message(STATUS "  - Library directory: ${CMAKE_BINARY_DIR}/lib")
 
 if(APPLE)
     message(STATUS "macOS Build Configuration:")
     message(STATUS "  - PortAudio support: ${PORTAUDIO_LIBRARY}")
+    message(STATUS "  - Opus support: Built-in (${OPUS_LIBRARY})")
     message(STATUS "  - Porcupine support: ${PORCUPINE_LIBRARY}")
     message(STATUS "  - To install PortAudio: brew install portaudio")
     message(STATUS "  - To install Porcupine: visit https://picovoice.ai/")

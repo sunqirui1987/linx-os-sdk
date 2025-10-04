@@ -90,6 +90,10 @@
         "map": "cpp",
         "mutex": "cpp",
         "regex": "cpp",
-        "system_error": "cpp"
+        "system_error": "cpp",
+        "wake_word_porcupine.h": "c",
+        "audio_processor_mac.h": "c",
+        "wake_word_interface.h": "c",
+        "timestamp_queue.h": "c"
     }
 }
