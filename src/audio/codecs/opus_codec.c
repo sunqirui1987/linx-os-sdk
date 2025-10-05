@@ -27,6 +27,7 @@ typedef struct {
 
 // Opus编解码器特定函数
 static codec_error_t opus_codec_set_bitrate(audio_codec_t* codec, int bitrate);
+static codec_error_t opus_codec_set_complexity(audio_codec_t* codec, int complexity);
 static codec_error_t opus_codec_set_signal_type(audio_codec_t* codec, int signal_type);
 static codec_error_t opus_codec_set_vbr(audio_codec_t* codec, int vbr);
 static codec_error_t opus_codec_set_vbr_constraint(audio_codec_t* codec, int vbr_constraint);

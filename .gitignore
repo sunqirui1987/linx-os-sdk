@@ -27,3 +27,4 @@ src/common/build
 src/third/liblvgl/build
 src/audio/build
 src/audio/test/build
+src/common/std/test/build
