@@ -37,39 +37,32 @@ find_library(PORTAUDIO_LIBRARY
 # 包含目录
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio/processor
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/common/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/audio/processor
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/audio/audio
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/common/log
     ${PORTAUDIO_INCLUDE_DIR}
 )
 
 # 源文件
 set(TEST_SOURCES
-    audio_processor_mac_test.c
     audio_processor_mac_realtime_test.c
 )
 
 set(MAC_PROCESSOR_SOURCES
-    ../../../../board/mac/common/audio/processor/audio_processor_mac.c
-    ../../../../board/mac/common/audio/audio/portaudio_mac.c
+    ../audio_processor_mac.c
+    ../../audio/portaudio_mac.c
 )
 
 set(COMMON_SOURCES
-    ../audio_processor.c
-    ../../../common/log/linx_log.c
-    ../../audio/audio_interface.c
+    ../../../../../../src/audio/processor/audio_processor.c
+    ../../../../../../src/common/log/linx_log.c
+    ../../../../../../src/audio/audio/audio_interface.c
 )
 
 # 创建测试可执行文件
-add_executable(audio_processor_mac_test 
-    audio_processor_mac_test.c
-    ${MAC_PROCESSOR_SOURCES}
-    ${COMMON_SOURCES}
-)
 
 add_executable(audio_processor_mac_realtime_test
     audio_processor_mac_realtime_test.c
@@ -78,15 +71,7 @@ add_executable(audio_processor_mac_realtime_test
 )
 
 # 链接库
-target_link_libraries(audio_processor_mac_test
-    ${COREAUDIO_LIBRARY}
-    ${AUDIOTOOLBOX_LIBRARY}
-    ${AUDIOUNIT_LIBRARY}
-    ${COREFOUNDATION_LIBRARY}
-    ${PORTAUDIO_LIBRARY}
-    Threads::Threads
-    m
-)
+
 
 target_link_libraries(audio_processor_mac_realtime_test
     ${COREAUDIO_LIBRARY}
@@ -99,25 +84,16 @@ target_link_libraries(audio_processor_mac_realtime_test
 )
 
 # 设置包含目录属性
-target_include_directories(audio_processor_mac_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio/processor
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/common/log
-    ${PORTAUDIO_INCLUDE_DIR}
-)
+
 
 target_include_directories(audio_processor_mac_realtime_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio/processor
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/common/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/audio/
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/audio/processor
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/audio/audio
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/common/log
     ${PORTAUDIO_INCLUDE_DIR}
 )
 

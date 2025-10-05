@@ -5,11 +5,11 @@
 #include <signal.h>
 
 // 包含Mac平台的音频处理器和音频接口头文件
-#include "../../board/mac/common/audio/processor/audio_processor_mac.h"
-#include "../../board/mac/common/audio/audio/portaudio_mac.h"
-#include "../../src/audio/processor/audio_processor.h"
-#include "../../src/audio/audio/audio_interface.h"
-#include "../../src/common/log/linx_log.h"
+#include "../audio_processor_mac.h"
+#include "../../audio/portaudio_mac.h"
+#include "../../../../../../src/audio/processor/audio_processor.h"
+#include "../../../../../../src/audio/audio/audio_interface.h"
+#include "../../../../../../src/common/log/linx_log.h"
 
 static volatile int running = 1;
 

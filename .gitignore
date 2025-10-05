@@ -28,3 +28,5 @@ src/third/liblvgl/build
 src/audio/build
 src/audio/test/build
 src/common/std/test/build
+**/build
+src/audio/processor/test/build
