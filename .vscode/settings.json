@@ -94,6 +94,7 @@
         "wake_word_porcupine.h": "c",
         "audio_processor_mac.h": "c",
         "wake_word_interface.h": "c",
-        "timestamp_queue.h": "c"
+        "timestamp_queue.h": "c",
+        "signal.h": "c"
     }
 }

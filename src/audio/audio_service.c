@@ -199,13 +199,14 @@ static void* audio_input_thread_func(void* arg) {
     uint32_t bits;
     int samples;
     vector_int16_t_t audio_data;
-    int16_t* mono_data;
+    vector_int16_t_t mono_data;
     size_t i, j;
     
     service = (AudioService*)arg;
     
     // 初始化vector
     vector_int16_t_init(&audio_data);
+    vector_int16_t_init(&mono_data);
     
     while (1) {
         pthread_mutex_lock(&service->event_mutex);
@@ -242,17 +243,26 @@ static void* audio_input_thread_func(void* arg) {
             if (audio_service_read_audio_data(service, &audio_data, 16000, samples) == 0) {
                 /* If input channels is 2, we need to fetch the left channel data */
                 if (service->audio_interface->channels == 2) {
-                    mono_data = (int16_t*)malloc(samples * sizeof(int16_t));
-                    if (mono_data) {
-                        int16_t* data_ptr = vector_int16_t_data(&audio_data);
-                        for (i = 0, j = 0; i < (size_t)samples; i++, j += 2) {
-                            mono_data[i] = data_ptr[j];
-                        }
-                        audio_service_push_task_to_encode_queue(service, AUDIO_TASK_PROCESS_AUDIO, mono_data, samples * sizeof(int16_t));
-                        free(mono_data);
+                    // 类似C++版本的auto mono_data = std::vector<int16_t>(data.size() / 2);
+                    vector_int16_t_resize(&mono_data, vector_int16_t_size(&audio_data) / 2);
+                    
+                    int16_t* data_ptr = vector_int16_t_data(&audio_data);
+                    int16_t* mono_ptr = vector_int16_t_data(&mono_data);
+                    
+                    // 类似C++版本的for循环提取左声道数据
+                    for (i = 0, j = 0; i < vector_int16_t_size(&mono_data); i++, j += 2) {
+                        mono_ptr[i] = data_ptr[j];
                     }
+                    
+                    // 使用mono_data进行编码（类似C++版本的data = std::move(mono_data)）
+                    audio_service_push_task_to_encode_queue(service, AUDIO_TASK_PROCESS_AUDIO, 
+                                                          vector_int16_t_data(&mono_data), 
+                                                          vector_int16_t_size(&mono_data) * sizeof(int16_t));
                 } else {
-                    audio_service_push_task_to_encode_queue(service, AUDIO_TASK_PROCESS_AUDIO, vector_int16_t_data(&audio_data), vector_int16_t_size(&audio_data) * sizeof(int16_t));
+                    // 单声道直接使用原始数据
+                    audio_service_push_task_to_encode_queue(service, AUDIO_TASK_PROCESS_AUDIO, 
+                                                          vector_int16_t_data(&audio_data), 
+                                                          vector_int16_t_size(&audio_data) * sizeof(int16_t));
                 }
             }
             continue;
@@ -288,6 +298,7 @@ static void* audio_input_thread_func(void* arg) {
             samples = audio_processor_get_feed_size(service->audio_processor);
             if (samples > 0) {
                 if (audio_service_read_audio_data(service, &audio_data, 16000, samples) == 0) {
+                    // 类似C++版本的audio_processor_->Feed(std::move(data))
                     audio_processor_feed(service->audio_processor, vector_int16_t_data(&audio_data), vector_int16_t_size(&audio_data));
                 }
             }
@@ -300,265 +311,120 @@ static void* audio_input_thread_func(void* arg) {
     
     // 清理vector资源
     vector_int16_t_destroy(&audio_data);
+    vector_int16_t_destroy(&mono_data);
     
     LINX_LOGW(AUDIO_SERVICE_TAG, "Audio input task stopped");
     return NULL;
 }
 
 static void* audio_output_thread_func(void* arg) {
-    AudioService* service = (AudioService*)arg;
+    AudioService* service;
+    AudioTask* task;
+    size_t sample_count;
+    int16_t* samples;
+    float energy;
+    size_t i;
     
-    LINX_LOGI(AUDIO_SERVICE_TAG, "[PLAY] 🎵 音频输出线程启动");
+    service = (AudioService*)arg;
     
-    while (!service->service_stopped) {
+    while (1) {
+        // 类似C++版本的std::unique_lock<std::mutex> lock(audio_queue_mutex_);
         pthread_mutex_lock(&service->audio_queue_mutex);
         
-        size_t playback_queue_size = audio_task_queue_size(&service->audio_playback_queue);
-        if (playback_queue_size > 0) {
-            LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 播放队列有 %zu 个任务等待处理", playback_queue_size);
-        }
-        
+        // 类似C++版本的audio_queue_cv_.wait(lock, [this]() { return !audio_playback_queue_.empty() || service_stopped_; });
         while (audio_task_queue_is_empty(&service->audio_playback_queue) && !service->service_stopped) {
-            LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 播放队列为空，等待任务...");
             pthread_cond_wait(&service->audio_queue_cv, &service->audio_queue_mutex);
         }
         
         if (service->service_stopped) {
-            LINX_LOGI(AUDIO_SERVICE_TAG, "[PLAY] 服务已停止，退出播放线程");
             pthread_mutex_unlock(&service->audio_queue_mutex);
             break;
         }
         
-        AudioTask* task = audio_task_queue_pop(&service->audio_playback_queue);
+        // 类似C++版本的auto task = std::move(audio_playback_queue_.front());
+        task = audio_task_queue_pop(&service->audio_playback_queue);
+        if (!task) {
+            pthread_mutex_unlock(&service->audio_queue_mutex);
+            continue;
+        }
+        
+        // 类似C++版本的audio_queue_cv_.notify_all();
         pthread_cond_broadcast(&service->audio_queue_cv);
         pthread_mutex_unlock(&service->audio_queue_mutex);
         
-        if (task) {
-            LINX_LOGI(AUDIO_SERVICE_TAG, "[PLAY] 🎵 从播放队列获取任务，数据大小: %zu 字节", task->data_size);
+        // 检查并启用音频输出（类似C++版本的!codec_->output_enabled()）
+        if (!service->audio_interface || !service->audio_interface->vtable) {
+            LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] ❌ 音频接口不可用");
+            audio_task_destroy(task);
+            continue;
+        }
+        
+        // 启用音频输出（类似C++版本的codec_->EnableOutput(true)）
+        if (service->audio_interface->vtable->init_play) {
+            service->audio_interface->vtable->init_play(service->audio_interface);
+        }
+        
+        // 处理播放任务（类似C++版本的codec_->OutputData(task->pcm)）
+        if (task->data && task->data_size > 0) {
+            sample_count = task->data_size / sizeof(int16_t);
+            LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 准备播放 %zu 个样本", sample_count);
+            
+            // 计算音频数据的能量级别
+            samples = (int16_t*)task->data;
+            energy = 0.0f;
+            for (i = 0; i < sample_count; i++) {
+                energy += (float)(samples[i] * samples[i]);
+            }
+            energy = sqrtf(energy / sample_count);
+            LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 播放音频数据能量级别: %.2f", energy);
             
             // 播放音频数据
-            if (task->data && task->data_size > 0) {
-                size_t sample_count = task->data_size / sizeof(int16_t);
-                
-                LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 准备播放 %zu 个样本", sample_count);
-                
-                // 计算音频数据的能量级别
-                int16_t* samples = (int16_t*)task->data;
-                float energy = 0.0f;
-                for (size_t i = 0; i < sample_count; i++) {
-                    energy += (float)(samples[i] * samples[i]);
-                }
-                energy = sqrtf(energy / sample_count);
-                LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 播放音频数据能量级别: %.2f", energy);
-                
-                if (service->audio_interface && service->audio_interface->vtable && 
-                    service->audio_interface->vtable->write) {
-                    
-                    LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 调用音频接口写入数据");
-                    int write_result = service->audio_interface->vtable->write(service->audio_interface, 
-                                                          (short*)task->data, sample_count);
-                    
-                    if (write_result == 0) {
-                        LINX_LOGI(AUDIO_SERVICE_TAG, "[PLAY] ✅ 音频数据写入成功，样本数: %zu", sample_count);
-                    } else {
-                        LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] ❌ 音频数据写入失败，错误码: %d", write_result);
-                    }
+            if (service->audio_interface->vtable->write) {
+                int write_result = service->audio_interface->vtable->write(
+                    service->audio_interface, 
+                    task->data, 
+                    task->data_size
+                );
+                if (write_result >= 0) {
+                    LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] ✅ 音频数据播放成功，写入 %d 字节", write_result);
                 } else {
-                    LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] ❌ 音频接口或写入函数不可用: interface=%p", service->audio_interface);
-                    if (service->audio_interface) {
-                        LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] vtable=%p, write=%p", 
-                                 service->audio_interface->vtable, 
-                                 service->audio_interface->vtable ? service->audio_interface->vtable->write : NULL);
-                    }
+                    LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] ❌ 音频数据播放失败，错误码: %d", write_result);
                 }
             } else {
-                LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] ❌ 播放任务数据无效: data=%p, size=%zu", task->data, task->data_size);
+                LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] ❌ 音频接口或写入函数不可用: interface=%p", service->audio_interface);
+                if (service->audio_interface) {
+                    LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] vtable=%p, write=%p", 
+                             service->audio_interface->vtable, 
+                             service->audio_interface->vtable ? service->audio_interface->vtable->write : NULL);
+                }
             }
-            
-            get_current_time(&service->last_output_time);
-            service->debug_statistics.playback_count++;
-            
-            LINX_LOGD(AUDIO_SERVICE_TAG, "[PLAY] 播放统计: 总播放次数 %u", service->debug_statistics.playback_count);
-            
-            audio_task_destroy(task);
         } else {
-            LINX_LOGW(AUDIO_SERVICE_TAG, "[PLAY] 从播放队列获取的任务为空");
+            LINX_LOGE(AUDIO_SERVICE_TAG, "[PLAY] ❌ 播放任务数据无效: data=%p, size=%zu", task->data, task->data_size);
         }
+        
+        // 更新最后输出时间（类似C++版本的last_output_time_ = std::chrono::steady_clock::now()）
+        get_current_time(&service->last_output_time);
+        service->debug_statistics.playback_count++;
+
+        // 记录时间戳用于服务器AEC（类似C++版本的timestamp_queue_.push_back(task->timestamp)）
+        if (task->timestamp > 0) {
+            pthread_mutex_lock(&service->audio_queue_mutex);
+            timestamp_queue_push(&service->timestamp_queue, task->timestamp, 
+                                service->debug_statistics.playback_count, 0);
+            pthread_mutex_unlock(&service->audio_queue_mutex);
+        }
+
+        
+        // 清理任务
+        audio_task_destroy(task);
     }
     
-    LINX_LOGW(AUDIO_SERVICE_TAG, "[PLAY] 音频输出线程停止");
+    LINX_LOGW(AUDIO_SERVICE_TAG, "Audio output task stopped");
     return NULL;
 }
 
 static void* opus_codec_thread_func(void* arg) {
-    AudioService* service = (AudioService*)arg;
     
-    while (!service->service_stopped) {
-        pthread_mutex_lock(&service->audio_queue_mutex);
-        while (service->service_stopped == false &&
-               (audio_packet_queue_is_empty(&service->audio_decode_queue) || 
-                audio_task_queue_size(&service->audio_playback_queue) >= MAX_PLAYBACK_TASKS_IN_QUEUE) &&
-               (audio_task_queue_is_empty(&service->audio_encode_queue) || 
-                audio_packet_queue_size(&service->audio_send_queue) >= MAX_SEND_PACKETS_IN_QUEUE)) {
-            pthread_cond_wait(&service->audio_queue_cv, &service->audio_queue_mutex);
-        }
-        
-        if (service->service_stopped) {
-            pthread_mutex_unlock(&service->audio_queue_mutex);
-            break;
-        }
-        
-        // 解码处理
-        if (!audio_packet_queue_is_empty(&service->audio_decode_queue) && 
-            audio_task_queue_size(&service->audio_playback_queue) < MAX_PLAYBACK_TASKS_IN_QUEUE) {
-            
-            LINX_LOGD(AUDIO_SERVICE_TAG, "[DECODE] 开始处理解码队列，队列大小: %zu", audio_packet_queue_size(&service->audio_decode_queue));
-            
-            AudioStreamPacket* packet = audio_packet_queue_pop(&service->audio_decode_queue);
-            pthread_cond_broadcast(&service->audio_queue_cv);
-            pthread_mutex_unlock(&service->audio_queue_mutex);
-            
-            if (packet) {
-                LINX_LOGI(AUDIO_SERVICE_TAG, "[DECODE] 🎵 从解码队列获取音频包，负载大小: %zu 字节", packet->payload_size);
-                
-                // 解码逻辑
-                size_t estimated_samples = (packet->sample_rate * packet->frame_duration) / 1000;
-                LINX_LOGD(AUDIO_SERVICE_TAG, "[DECODE] 估计解码样本数: %zu (采样率: %d, 帧时长: %dms)", 
-                         estimated_samples, packet->sample_rate, packet->frame_duration);
-                
-                int16_t* decoded_data = (int16_t*)malloc(estimated_samples * sizeof(int16_t));
-                
-                if (decoded_data && service->opus_decoder && packet->payload && packet->payload_size > 0) {
-                    size_t decoded_size = 0;
-                    
-                    LINX_LOGD(AUDIO_SERVICE_TAG, "[DECODE] 开始Opus解码，输入: %zu 字节", packet->payload_size);
-                    
-                    codec_error_t result = audio_codec_decode(service->opus_decoder, 
-                                                            packet->payload, packet->payload_size,
-                                                            decoded_data, estimated_samples, &decoded_size);
-                    if (result == CODEC_SUCCESS) {
-                        LINX_LOGI(AUDIO_SERVICE_TAG, "[DECODE] ✅ Opus解码成功，编码: %zu 字节 -> 解码: %zu 样本", 
-                                 packet->payload_size, decoded_size);
-                        
-                        AudioTask* task = audio_task_create(AUDIO_TASK_PLAY_SOUND, decoded_data, decoded_size * sizeof(int16_t));
-                        if (task) {
-                            task->timestamp = packet->timestamp;
-                            
-                            LINX_LOGD(AUDIO_SERVICE_TAG, "[DECODE] 创建播放任务，数据大小: %zu 字节", decoded_size * sizeof(int16_t));
-                            
-                            pthread_mutex_lock(&service->audio_queue_mutex);
-                            size_t playback_queue_size = audio_task_queue_size(&service->audio_playback_queue);
-                            LINX_LOGD(AUDIO_SERVICE_TAG, "[DECODE] 播放队列当前大小: %zu/%d", playback_queue_size, MAX_PLAYBACK_TASKS_IN_QUEUE);
-                            
-                            if (!audio_task_queue_push(&service->audio_playback_queue, task)) {
-                                LINX_LOGE(AUDIO_SERVICE_TAG, "[DECODE] ❌ 推送到播放队列失败");
-                                audio_task_destroy(task);
-                            } else {
-                                LINX_LOGI(AUDIO_SERVICE_TAG, "[DECODE] ✅ 播放任务已推送到播放队列，队列大小: %zu", audio_task_queue_size(&service->audio_playback_queue));
-                                pthread_cond_broadcast(&service->audio_queue_cv);
-                            }
-                            pthread_mutex_unlock(&service->audio_queue_mutex);
-                            
-                            service->debug_statistics.decode_count++;
-                            LINX_LOGD(AUDIO_SERVICE_TAG, "[DECODE] 解码统计: 总解码次数 %u", service->debug_statistics.decode_count);
-                        } else {
-                            LINX_LOGE(AUDIO_SERVICE_TAG, "[DECODE] ❌ 创建播放任务失败");
-                            free(decoded_data);
-                        }
-                    } else {
-                        LINX_LOGE(AUDIO_SERVICE_TAG, "[DECODE] ❌ Opus解码失败，错误码: %d", result);
-                        free(decoded_data);
-                    }
-                } else {
-                    LINX_LOGE(AUDIO_SERVICE_TAG, "[DECODE] ❌ 解码器或数据无效: decoder=%p, data=%p, payload=%p, size=%zu", 
-                             service->opus_decoder, decoded_data, packet->payload, packet->payload_size);
-                    if (decoded_data) free(decoded_data);
-                }
-                audio_stream_packet_destroy(packet);
-            } else {
-                LINX_LOGW(AUDIO_SERVICE_TAG, "[DECODE] 从解码队列获取的音频包为空");
-            }
-            pthread_mutex_lock(&service->audio_queue_mutex);
-        }
-        
-        // 编码处理
-        if (!audio_task_queue_is_empty(&service->audio_encode_queue) && 
-            audio_packet_queue_size(&service->audio_send_queue) < MAX_SEND_PACKETS_IN_QUEUE) {
-            
-            LINX_LOGD(AUDIO_SERVICE_TAG, "[ENCODE] 开始处理编码队列，队列大小: %zu", audio_task_queue_size(&service->audio_encode_queue));
-            
-            AudioTask* task = audio_task_queue_pop(&service->audio_encode_queue);
-            pthread_cond_broadcast(&service->audio_queue_cv);
-            pthread_mutex_unlock(&service->audio_queue_mutex);
-            
-            if (task) {
-                LINX_LOGI(AUDIO_SERVICE_TAG, "[ENCODE] 🎵 从编码队列获取任务，数据大小: %zu 字节", task->data_size);
-                
-                AudioStreamPacket* packet = audio_stream_packet_create();
-                if (packet) {
-                    packet->frame_duration = OPUS_FRAME_DURATION_MS;
-                    packet->sample_rate = service->config.output_format.sample_rate;
-                    packet->timestamp = task->timestamp;
-                    
-                    LINX_LOGD(AUDIO_SERVICE_TAG, "[ENCODE] 创建音频包，帧时长: %dms, 采样率: %d", packet->frame_duration, packet->sample_rate);
-                    
-                    if (service->opus_encoder && task->data && task->data_size > 0) {
-                        size_t encoded_size = 0;
-                        size_t sample_count = task->data_size / sizeof(int16_t);
-                        
-                        LINX_LOGD(AUDIO_SERVICE_TAG, "[ENCODE] 开始Opus编码，样本数: %zu", sample_count);
-                        
-                        codec_error_t result = audio_codec_encode(service->opus_encoder,
-                                                                (int16_t*)task->data, sample_count,
-                                                                packet->payload, packet->payload_capacity, &encoded_size);
-                        if (result == CODEC_SUCCESS) {
-                            packet->payload_size = encoded_size;
-                            
-                            LINX_LOGI(AUDIO_SERVICE_TAG, "[ENCODE] ✅ Opus编码成功，原始: %zu 样本 -> 编码: %zu 字节", sample_count, encoded_size);
-                            
-                            pthread_mutex_lock(&service->audio_queue_mutex);
-                            size_t send_queue_size = audio_packet_queue_size(&service->audio_send_queue);
-                            LINX_LOGD(AUDIO_SERVICE_TAG, "[ENCODE] 发送队列当前大小: %zu/%d", send_queue_size, MAX_SEND_PACKETS_IN_QUEUE);
-                            
-                            if (!audio_packet_queue_push(&service->audio_send_queue, packet)) {
-                                LINX_LOGE(AUDIO_SERVICE_TAG, "[ENCODE] ❌ 推送到发送队列失败");
-                                audio_stream_packet_destroy(packet);
-                            } else {
-                                LINX_LOGI(AUDIO_SERVICE_TAG, "[ENCODE] ✅ 音频包已推送到发送队列，队列大小: %zu", audio_packet_queue_size(&service->audio_send_queue));
-                                pthread_cond_broadcast(&service->audio_queue_cv);
-                                
-                                LINX_LOGI(AUDIO_SERVICE_TAG, "[ENCODE] 🔔 触发发送队列可用回调");
-                                trigger_callbacks(service, "send_queue_available", NULL);
-                            }
-                            pthread_mutex_unlock(&service->audio_queue_mutex);
-                            
-                            service->debug_statistics.encode_count++;
-                            LINX_LOGD(AUDIO_SERVICE_TAG, "[ENCODE] 编码统计: 总编码次数 %u", service->debug_statistics.encode_count);
-                        } else {
-                            LINX_LOGE(AUDIO_SERVICE_TAG, "[ENCODE] ❌ Opus编码失败，错误码: %d", result);
-                            audio_stream_packet_destroy(packet);
-                        }
-                    } else {
-                        LINX_LOGE(AUDIO_SERVICE_TAG, "[ENCODE] ❌ 编码器或数据无效: encoder=%p, data=%p, size=%zu", 
-                                 service->opus_encoder, task->data, task->data_size);
-                        audio_stream_packet_destroy(packet);
-                    }
-                } else {
-                    LINX_LOGE(AUDIO_SERVICE_TAG, "[ENCODE] ❌ 创建音频包失败");
-                }
-                audio_task_destroy(task);
-            } else {
-                LINX_LOGW(AUDIO_SERVICE_TAG, "[ENCODE] 从编码队列获取的任务为空");
-            }
-            pthread_mutex_lock(&service->audio_queue_mutex);
-        }
-        
-        pthread_mutex_unlock(&service->audio_queue_mutex);
-        usleep(1000);
-    }
-    
-    LINX_LOGW(AUDIO_SERVICE_TAG, "Opus codec thread stopped");
-    return NULL;
 }
 
 // ============================================================================

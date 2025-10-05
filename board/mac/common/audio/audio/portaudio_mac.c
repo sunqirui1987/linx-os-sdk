@@ -1,532 +1,217 @@
 #include "portaudio_mac.h"
-#include "linx_log.h"
+#include "common/log/linx_log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-
+#define PORTAUDIO_AVAILABLE 1
+#if PORTAUDIO_AVAILABLE
 
 /**
- * PortAudio implementation data structure
+ * PortAudio实现数据结构
  */
 typedef struct {
-    PaStream* input_stream;
-    PaStream* output_stream;
-    PaStreamParameters input_params;
-    PaStreamParameters output_params;
+    PaStream* input_stream;                 ///< 输入音频流
+    PaStream* output_stream;                ///< 输出音频流
+    PaStreamParameters input_params;        ///< 输入流参数
+    PaStreamParameters output_params;       ///< 输出流参数
     
-    // Ring buffers for audio data
-    short* record_buffer;
-    short* play_buffer;
-    size_t record_buffer_size;
-    size_t play_buffer_size;
-    size_t record_read_pos;
-    size_t record_write_pos;
-    size_t play_read_pos;
-    size_t play_write_pos;
+    // 音频数据环形缓冲区
+    int16_t* record_buffer;                 ///< 录音缓冲区
+    int16_t* play_buffer;                   ///< 播放缓冲区
+    size_t record_buffer_size;              ///< 录音缓冲区大小
+    size_t play_buffer_size;                ///< 播放缓冲区大小
+    size_t record_read_pos;                 ///< 录音读取位置
+    size_t record_write_pos;                ///< 录音写入位置
+    size_t play_read_pos;                   ///< 播放读取位置
+    size_t play_write_pos;                  ///< 播放写入位置
     
-    // Thread synchronization
-    pthread_mutex_t record_mutex;
-    pthread_mutex_t play_mutex;
-    pthread_cond_t record_cond;
-    pthread_cond_t play_cond;
+    // 线程同步
+    pthread_mutex_t record_mutex;           ///< 录音互斥锁
+    pthread_mutex_t play_mutex;             ///< 播放互斥锁
+    pthread_cond_t record_cond;             ///< 录音条件变量
+    pthread_cond_t play_cond;               ///< 播放条件变量
     
-    // State flags
-    bool record_thread_running;
-    bool play_thread_running;
-    pthread_t record_thread;
-    pthread_t play_thread;
+    // 状态标志
+    bool input_stream_active;               ///< 输入流是否活跃
+    bool output_stream_active;              ///< 输出流是否活跃
 } PortAudioMacData;
 
-
-// Forward declarations for vtable functions
+// 虚函数表函数前向声明
 static int portaudio_mac_init(AudioInterface* self);
-static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_rate,
-                                    int frame_size, int channels, int periods,
-                                    int buffer_size, int period_size);
-static int portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_size);
-static int portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size);
-static int portaudio_mac_record(AudioInterface* self);
-static int portaudio_mac_init_play(AudioInterface* self);
-static bool portaudio_mac_is_play_buffer_empty(AudioInterface* self);
+static int portaudio_mac_start(AudioInterface* self);
 static int portaudio_mac_destroy(AudioInterface* self);
+static int portaudio_mac_set_output_volume(AudioInterface* self, int volume);
+static int portaudio_mac_enable_input(AudioInterface* self, bool enable);
+static int portaudio_mac_enable_output(AudioInterface* self, bool enable);
+static int portaudio_mac_output_data(AudioInterface* self, const int16_t* data, size_t samples);
+static int portaudio_mac_input_data(AudioInterface* self, int16_t* data, size_t samples);
+static int portaudio_mac_read(AudioInterface* self, int16_t* dest, size_t samples);
+static int portaudio_mac_write(AudioInterface* self, const int16_t* data, size_t samples);
+static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_rate, int frame_size, 
+                                     int channels, int periods, int buffer_size, int period_size);
 
-// VTable for PortAudio Mac implementation
-static const AudioInterfaceVTable portaudio_mac_vtable = {
-    .init = portaudio_mac_init,
-    .set_config = portaudio_mac_set_config,
-    .read = portaudio_mac_read,
-    .write = portaudio_mac_write,
-    .record = portaudio_mac_record,
-    .init_play = portaudio_mac_init_play,
-    .is_play_buffer_empty = portaudio_mac_is_play_buffer_empty,
-    .destroy = portaudio_mac_destroy
-};
-
-
-/**
- * PortAudio callback functions
- */
+// PortAudio回调函数前向声明
 static int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
-                             unsigned long frame_count,
-                             const PaStreamCallbackTimeInfo* time_info,
-                             PaStreamCallbackFlags status_flags,
-                             void* user_data);
+                                     unsigned long frame_count,
+                                     const PaStreamCallbackTimeInfo* time_info,
+                                     PaStreamCallbackFlags status_flags,
+                                     void* user_data);
 
 static int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
-                           unsigned long frame_count,
-                           const PaStreamCallbackTimeInfo* time_info,
-                           PaStreamCallbackFlags status_flags,
-                           void* user_data);
+                                   unsigned long frame_count,
+                                   const PaStreamCallbackTimeInfo* time_info,
+                                   PaStreamCallbackFlags status_flags,
+                                   void* user_data);
+
+// 内部辅助函数前向声明
+static int _start_input_stream(AudioInterface* self);
+static int _start_output_stream(AudioInterface* self);
+
+// PortAudio Mac虚函数表，对齐AudioCodec功能
+static const AudioInterfaceVTable portaudio_mac_vtable = {
+    // 核心生命周期函数
+    .init = portaudio_mac_init,
+    .start = portaudio_mac_start,
+    .destroy = portaudio_mac_destroy,
+    
+    // 音量控制函数
+    .set_output_volume = portaudio_mac_set_output_volume,
+    
+    // 输入输出管理函数
+    .enable_input = portaudio_mac_enable_input,
+    .enable_output = portaudio_mac_enable_output,
+    
+    // 高级数据处理函数
+    .output_data = portaudio_mac_output_data,
+    .input_data = portaudio_mac_input_data,
+    
+    // 底层读写函数
+    .read = portaudio_mac_read,
+    .write = portaudio_mac_write,
+    
+    // 配置函数
+    .set_config = portaudio_mac_set_config
+};
 
 AudioInterface* portaudio_mac_create(void) {
     AudioInterface* interface = (AudioInterface*)malloc(sizeof(AudioInterface));
     if (!interface) {
-        LOG_ERROR("Failed to allocate memory for AudioInterface");
+        LOG_ERROR("分配AudioInterface内存失败");
         return NULL;
     }
     
     PortAudioMacData* data = (PortAudioMacData*)malloc(sizeof(PortAudioMacData));
     if (!data) {
-        LOG_ERROR("Failed to allocate memory for PortAudioMacData");
+        LOG_ERROR("分配PortAudioMacData内存失败");
         free(interface);
         return NULL;
     }
     
-    // Initialize structure
+    // 初始化结构体
     memset(interface, 0, sizeof(AudioInterface));
     memset(data, 0, sizeof(PortAudioMacData));
     
     interface->vtable = &portaudio_mac_vtable;
     interface->impl_data = data;
     
-    // Initialize mutexes and conditions
+    // 初始化默认值（对齐AudioCodec的默认值）
+    interface->output_volume_ = AUDIO_VOLUME_DEFAULT;
+    interface->input_enabled_ = false;
+    interface->output_enabled_ = false;
+    interface->is_started = false;
+    interface->duplex_ = true;               // 支持全双工
+    interface->input_reference_ = false;     // 无输入参考
+    interface->input_sample_rate_ = 0;       // 使用通用采样率
+    interface->output_sample_rate_ = 0;      // 使用通用采样率
+    interface->input_channels_ = 1;          // 默认单声道输入
+    interface->output_channels_ = 1;         // 默认单声道输出
+    
+    // 初始化互斥锁和条件变量
     pthread_mutex_init(&data->record_mutex, NULL);
     pthread_mutex_init(&data->play_mutex, NULL);
     pthread_cond_init(&data->record_cond, NULL);
     pthread_cond_init(&data->play_cond, NULL);
     
+    LOG_INFO("PortAudio Mac接口创建成功");
     return interface;
 }
 
+// ============================================================================
+// 核心生命周期函数实现
+// ============================================================================
+
 static int portaudio_mac_init(AudioInterface* self) {
     if (!self || !self->impl_data) {
-        LOG_ERROR("Invalid audio interface");
-        return -1;
+        LOG_ERROR("无效的音频接口");
+        return AUDIO_ERROR_INVALID;
     }
     
     PaError err = Pa_Initialize();
     if (err != paNoError) {
-        LOG_ERROR("Failed to initialize PortAudio: %s", Pa_GetErrorText(err));
-        return -1;
+        LOG_ERROR("初始化PortAudio失败: %s", Pa_GetErrorText(err));
+        return AUDIO_ERROR_DEVICE;
     }
     
     self->is_initialized = true;
-    LOG_INFO("PortAudio initialized successfully");
-    return 0; // Success
+    LOG_INFO("PortAudio初始化成功");
+    return AUDIO_SUCCESS;
 }
 
-static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_rate, 
-                                     int frame_size, int channels, int periods, 
-                                     int buffer_size, int period_size) {
-    if (!self || !self->impl_data) {
-        LOG_ERROR("Invalid audio interface");
-        return;
+static int portaudio_mac_start(AudioInterface* self) {
+    if (!self) {
+        LOG_ERROR("无效的音频接口");
+        return AUDIO_ERROR_INVALID;
     }
     
-    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
-    
-    // Store configuration in AudioInterface structure
-    self->sample_rate = sample_rate;
-    self->frame_size = frame_size;
-    self->channels = channels;
-    self->periods = periods;
-    self->buffer_size = buffer_size;
-    self->period_size = period_size;
-    
-    // Set up input parameters
-    data->input_params.device = Pa_GetDefaultInputDevice();
-    if (data->input_params.device == paNoDevice) {
-        LOG_ERROR("No default input device found");
-        return;
+    // 设置默认值（对齐AudioCodec::Start的逻辑）
+    if (self->output_volume_ <= 0) {
+        self->output_volume_ = AUDIO_VOLUME_DEFAULT;
+        LOG_INFO("设置默认输出音量为 %d", self->output_volume_);
     }
     
-    const PaDeviceInfo* inputDeviceInfo = Pa_GetDeviceInfo(data->input_params.device);
-    if (!inputDeviceInfo) {
-        LOG_ERROR("Failed to get input device info");
-        return;
-    }
+    self->is_started = true;
     
-    // Use the minimum of requested channels and device max channels
-    int inputChannels = (channels <= inputDeviceInfo->maxInputChannels) ? channels : inputDeviceInfo->maxInputChannels;
+    // 启用输入和输出（对齐AudioCodec::Start的行为）
+    portaudio_mac_enable_input(self, true);
+    portaudio_mac_enable_output(self, true);
     
-    data->input_params.channelCount = inputChannels;
-    data->input_params.sampleFormat = paInt16;
-    data->input_params.suggestedLatency = inputDeviceInfo->defaultLowInputLatency;
-    data->input_params.hostApiSpecificStreamInfo = NULL;
-    
-    LOG_INFO("Input device: %s, channels: %d (requested: %d, max: %d)", 
-             inputDeviceInfo->name, inputChannels, channels, inputDeviceInfo->maxInputChannels);
-    
-    // Set up output parameters
-    data->output_params.device = Pa_GetDefaultOutputDevice();
-    if (data->output_params.device == paNoDevice) {
-        LOG_ERROR("No default output device found");
-        return;
-    }
-    
-    const PaDeviceInfo* outputDeviceInfo = Pa_GetDeviceInfo(data->output_params.device);
-    if (!outputDeviceInfo) {
-        LOG_ERROR("Failed to get output device info");
-        return;
-    }
-    
-    // Use the minimum of requested channels and device max channels
-    int outputChannels = (channels <= outputDeviceInfo->maxOutputChannels) ? channels : outputDeviceInfo->maxOutputChannels;
-    
-    data->output_params.channelCount = outputChannels;
-    data->output_params.sampleFormat = paInt16;
-    data->output_params.suggestedLatency = outputDeviceInfo->defaultLowOutputLatency;
-    data->output_params.hostApiSpecificStreamInfo = NULL;
-    
-    LOG_INFO("Output device: %s, channels: %d (requested: %d, max: %d)", 
-             outputDeviceInfo->name, outputChannels, channels, outputDeviceInfo->maxOutputChannels);
-    
-    // Allocate ring buffers
-    data->record_buffer_size = buffer_size * channels;
-    data->play_buffer_size = buffer_size * channels;
-    
-    data->record_buffer = (short*)malloc(data->record_buffer_size * sizeof(short));
-    data->play_buffer = (short*)malloc(data->play_buffer_size * sizeof(short));
-    
-    if (!data->record_buffer || !data->play_buffer) {
-        LOG_ERROR("Failed to allocate audio buffers");
-        return;
-    }
-    
-    memset(data->record_buffer, 0, data->record_buffer_size * sizeof(short));
-    memset(data->play_buffer, 0, data->play_buffer_size * sizeof(short));
-    
-    LOG_INFO("Audio configuration set: %u Hz, %d channels, %d frame size", 
-                  sample_rate, channels, frame_size);
-}
-
-int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
-                             unsigned long frame_count,
-                             const PaStreamCallbackTimeInfo* time_info,
-                             PaStreamCallbackFlags status_flags,
-                             void* user_data) {
-    AudioInterface* interface = (AudioInterface*)user_data;
-    PortAudioMacData* data = (PortAudioMacData*)interface->impl_data;
-    const short* input = (const short*)input_buffer;
-    
-    if (!input || !data) {
-        return paContinue;
-    }
-    
-    pthread_mutex_lock(&data->record_mutex);
-    
-    size_t samples_to_write = frame_count * interface->channels;
-    // Calculate used space in the ring buffer
-    size_t used_space = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
-    // Available space is buffer size minus used space minus 1 (to distinguish full from empty)
-    size_t available_space = data->record_buffer_size - used_space - 1;
-    
-    if (samples_to_write <= available_space) {
-        for (size_t i = 0; i < samples_to_write; i++) {
-            data->record_buffer[data->record_write_pos] = input[i];
-            data->record_write_pos = (data->record_write_pos + 1) % data->record_buffer_size;
-        }
-        pthread_cond_signal(&data->record_cond);
-    } else {
-        // Buffer overflow - log warning but continue
-        static int overflow_count = 0;
-        overflow_count++;
-        if (overflow_count % 10 == 1) { // 每10次溢出只打印一次日志
-            LOG_WARN("Record buffer overflow #%d, dropping %lu samples (buffer usage: %zu/%zu)", 
-                     overflow_count, samples_to_write, used_space, data->record_buffer_size);
-        }
-    }
-    
-    pthread_mutex_unlock(&data->record_mutex);
-    
-    return paContinue;
-}
-
-int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
-                           unsigned long frame_count,
-                           const PaStreamCallbackTimeInfo* time_info,
-                           PaStreamCallbackFlags status_flags,
-                           void* user_data) {
-    AudioInterface* interface = (AudioInterface*)user_data;
-    PortAudioMacData* data = (PortAudioMacData*)interface->impl_data;
-    short* output = (short*)output_buffer;
-    
-    if (!output || !data) {
-        return paContinue;
-    }
-    
-    pthread_mutex_lock(&data->play_mutex);
-    
-    size_t samples_to_read = frame_count * interface->channels;
-    // Calculate available data in the ring buffer
-    size_t available_data = (data->play_write_pos - data->play_read_pos + data->play_buffer_size) % data->play_buffer_size;
-    
-    if (samples_to_read <= available_data) {
-        for (size_t i = 0; i < samples_to_read; i++) {
-            output[i] = data->play_buffer[data->play_read_pos];
-            data->play_read_pos = (data->play_read_pos + 1) % data->play_buffer_size;
-        }
-    } else {
-        // Not enough data, output silence
-        memset(output, 0, samples_to_read * sizeof(short));
-        //LOG_DEBUG("Play buffer underrun, outputting silence for %lu samples", samples_to_read);
-    }
-    
-    pthread_mutex_unlock(&data->play_mutex);
-    
-    return paContinue;
-}
-
-static int portaudio_mac_read(AudioInterface* self, short* buffer, size_t frame_size) {
-    if (!self || !self->impl_data || !buffer) {
-        LOG_ERROR("Invalid parameters for read");
-        return -1;
-    }
-    
-    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
-    size_t samples_needed = frame_size * self->channels;
-    
-    pthread_mutex_lock(&data->record_mutex);
-    
-    size_t available_data = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
-    
-    if (available_data < samples_needed) {
-        // Wait for more data
-        struct timespec timeout;
-        clock_gettime(CLOCK_REALTIME, &timeout);
-        timeout.tv_sec += 1; // 1 second timeout
-        
-        int result = pthread_cond_timedwait(&data->record_cond, &data->record_mutex, &timeout);
-        if (result != 0) {
-            pthread_mutex_unlock(&data->record_mutex);
-            return -1;
-        }
-        
-        available_data = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
-    }
-    
-    if (available_data >= samples_needed) {
-        for (size_t i = 0; i < samples_needed; i++) {
-            buffer[i] = data->record_buffer[data->record_read_pos];
-            data->record_read_pos = (data->record_read_pos + 1) % data->record_buffer_size;
-        }
-        pthread_mutex_unlock(&data->record_mutex);
-        return 0; // Success
-    }
-    
-    pthread_mutex_unlock(&data->record_mutex);
-    return -1;
-}
-
-static int portaudio_mac_write(AudioInterface* self, short* buffer, size_t frame_size) {
-    if (!self || !self->impl_data || !buffer) {
-        LOG_ERROR("Invalid parameters for write");
-        return -1;
-    }
-    
-    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
-    size_t samples_to_write = frame_size * self->channels;
-    
-    pthread_mutex_lock(&data->play_mutex);
-    
-    size_t available_space = data->play_buffer_size - 
-                            ((data->play_write_pos - data->play_read_pos + data->play_buffer_size) % data->play_buffer_size);
-    
-    if (available_space >= samples_to_write) {
-        for (size_t i = 0; i < samples_to_write; i++) {
-            data->play_buffer[data->play_write_pos] = buffer[i];
-            data->play_write_pos = (data->play_write_pos + 1) % data->play_buffer_size;
-        }
-        pthread_mutex_unlock(&data->play_mutex);
-        return 0; // Success
-    }
-    
-    pthread_mutex_unlock(&data->play_mutex);
-    return -1;
-}
-
-static int portaudio_mac_record(AudioInterface* self) {
-    if (!self || !self->impl_data) {
-        LOG_ERROR("Invalid audio interface");
-        return -1;
-    }
-    
-    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
-    
-    if (self->is_recording) {
-        LOG_WARN("Already recording");
-        return 0; // Already recording is not an error
-    }
-    
-    // Validate that configuration has been set
-    if (self->sample_rate == 0 || self->frame_size == 0 || self->channels == 0) {
-        LOG_ERROR("Audio configuration not set. Call set_config first.");
-        return -1;
-    }
-    
-    // Validate input device
-    if (data->input_params.device == paNoDevice) {
-        LOG_ERROR("No input device configured");
-        return -1;
-    }
-    
-    // Check if device is still valid
-    const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(data->input_params.device);
-    if (!deviceInfo) {
-        LOG_ERROR("Input device is no longer available");
-        return -1;
-    }
-    
-    LOG_INFO("Opening input stream: device=%s, rate=%u, channels=%d, frame_size=%d", 
-             deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
-    
-    PaError err = Pa_OpenStream(&data->input_stream,
-                               &data->input_params,
-                               NULL, // no output
-                               self->sample_rate,
-                               self->frame_size,
-                               paClipOff,
-                               _portaudio_record_callback,
-                               self);
-    
-    if (err != paNoError) {
-        LOG_ERROR("Failed to open input stream: %s", Pa_GetErrorText(err));
-        return -1;
-    }
-    
-    err = Pa_StartStream(data->input_stream);
-    if (err != paNoError) {
-        LOG_ERROR("Failed to start input stream: %s", Pa_GetErrorText(err));
-        Pa_CloseStream(data->input_stream);
-        return -1;
-    }
-    
-    self->is_recording = true;
-    LOG_INFO("Recording started");
-    return 0; // Success
-}
-
-static int portaudio_mac_init_play(AudioInterface* self) {
-    if (!self || !self->impl_data) {
-        LOG_ERROR("Invalid audio interface");
-        return -1;
-    }
-    
-    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
-    
-    if (self->is_playing) {
-        LOG_WARN("Already playing");
-        return 0; // Already playing is not an error
-    }
-    
-    // Validate that configuration has been set
-    if (self->sample_rate == 0 || self->frame_size == 0 || self->channels == 0) {
-        LOG_ERROR("Audio configuration not set. Call set_config first.");
-        return -1;
-    }
-    
-    // Validate output device
-    if (data->output_params.device == paNoDevice) {
-        LOG_ERROR("No output device configured");
-        return -1;
-    }
-    
-    // Check if device is still valid
-    const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(data->output_params.device);
-    if (!deviceInfo) {
-        LOG_ERROR("Output device is no longer available");
-        return -1;
-    }
-    
-    LOG_INFO("Opening output stream: device=%s, rate=%u, channels=%d, frame_size=%d", 
-             deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
-    
-    PaError err = Pa_OpenStream(&data->output_stream,
-                               NULL, // no input
-                               &data->output_params,
-                               self->sample_rate,
-                               self->frame_size,
-                               paClipOff,
-                               _portaudio_play_callback,
-                               self);
-    
-    if (err != paNoError) {
-        LOG_ERROR("Failed to open output stream: %s", Pa_GetErrorText(err));
-        return -1;
-    }
-    
-    err = Pa_StartStream(data->output_stream);
-    if (err != paNoError) {
-        LOG_ERROR("Failed to start output stream: %s", Pa_GetErrorText(err));
-        Pa_CloseStream(data->output_stream);
-        return -1;
-    }
-    
-    self->is_playing = true;
-    LOG_INFO("Playback started");
-    return 0; // Success
-}
-
-static bool portaudio_mac_is_play_buffer_empty(AudioInterface* self) {
-    if (!self || !self->impl_data) {
-        return true; // 如果接口无效，认为缓冲区为空
-    }
-    
-    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
-    
-    // 如果没有在播放，认为缓冲区为空
-    if (!self->is_playing) {
-        return true;
-    }
-    
-    // 检查播放缓冲区是否有数据
-    pthread_mutex_lock(&data->play_mutex);
-    size_t available_data = (data->play_write_pos - data->play_read_pos + data->play_buffer_size) % data->play_buffer_size;
-    pthread_mutex_unlock(&data->play_mutex);
-    
-    // 如果缓冲区中没有数据，认为为空
-    return (available_data == 0);
+    LOG_INFO("PortAudio Mac接口启动成功");
+    return AUDIO_SUCCESS;
 }
 
 static int portaudio_mac_destroy(AudioInterface* self) {
     if (!self || !self->impl_data) {
-        return -1;
+        LOG_ERROR("无效的音频接口");
+        return AUDIO_ERROR_INVALID;
     }
     
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
     
-    // Stop and close streams
+    // 停止并关闭音频流
     if (data->input_stream) {
         Pa_StopStream(data->input_stream);
         Pa_CloseStream(data->input_stream);
+        data->input_stream = NULL;
     }
     
     if (data->output_stream) {
         Pa_StopStream(data->output_stream);
         Pa_CloseStream(data->output_stream);
+        data->output_stream = NULL;
     }
     
-    // Clean up buffers
+    // 清理缓冲区
     if (data->record_buffer) {
         free(data->record_buffer);
+        data->record_buffer = NULL;
     }
     
     if (data->play_buffer) {
         free(data->play_buffer);
+        data->play_buffer = NULL;
     }
     
-    // Clean up synchronization objects
+    // 清理同步对象
     pthread_mutex_destroy(&data->record_mutex);
     pthread_mutex_destroy(&data->play_mutex);
     pthread_cond_destroy(&data->record_cond);
@@ -539,6 +224,537 @@ static int portaudio_mac_destroy(AudioInterface* self) {
         Pa_Terminate();
     }
     
-    LOG_INFO("PortAudio Mac implementation destroyed");
-    return 0; // Success
+    LOG_INFO("PortAudio Mac实现销毁成功");
+    return AUDIO_SUCCESS;
 }
+
+// ============================================================================
+// 配置函数实现
+// ============================================================================
+
+static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_rate, 
+                                     int frame_size, int channels, int periods, 
+                                     int buffer_size, int period_size) {
+    if (!self || !self->impl_data) {
+        LOG_ERROR("无效的音频接口");
+        return;
+    }
+    
+    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
+    
+    // 存储配置到AudioInterface结构体中
+    self->sample_rate = sample_rate;
+    self->frame_size = frame_size;
+    self->channels = channels;
+    self->periods = periods;
+    self->buffer_size = buffer_size;
+    self->period_size = period_size;
+    
+    // 设置输入参数
+    data->input_params.device = Pa_GetDefaultInputDevice();
+    if (data->input_params.device == paNoDevice) {
+        LOG_ERROR("未找到默认输入设备");
+        return;
+    }
+    
+    const PaDeviceInfo* inputDeviceInfo = Pa_GetDeviceInfo(data->input_params.device);
+    if (!inputDeviceInfo) {
+        LOG_ERROR("获取输入设备信息失败");
+        return;
+    }
+    
+    // 使用请求的通道数和设备最大通道数中的较小值
+    int inputChannels = (channels <= inputDeviceInfo->maxInputChannels) ? channels : inputDeviceInfo->maxInputChannels;
+    
+    data->input_params.channelCount = inputChannels;
+    data->input_params.sampleFormat = paInt16;
+    data->input_params.suggestedLatency = inputDeviceInfo->defaultLowInputLatency;
+    data->input_params.hostApiSpecificStreamInfo = NULL;
+    
+    LOG_INFO("输入设备: %s, 通道数: %d (请求: %d, 最大: %d)", 
+             inputDeviceInfo->name, inputChannels, channels, inputDeviceInfo->maxInputChannels);
+    
+    // 设置输出参数
+    data->output_params.device = Pa_GetDefaultOutputDevice();
+    if (data->output_params.device == paNoDevice) {
+        LOG_ERROR("未找到默认输出设备");
+        return;
+    }
+    
+    const PaDeviceInfo* outputDeviceInfo = Pa_GetDeviceInfo(data->output_params.device);
+    if (!outputDeviceInfo) {
+        LOG_ERROR("获取输出设备信息失败");
+        return;
+    }
+    
+    // 使用请求的通道数和设备最大通道数中的较小值
+    int outputChannels = (channels <= outputDeviceInfo->maxOutputChannels) ? channels : outputDeviceInfo->maxOutputChannels;
+    
+    data->output_params.channelCount = outputChannels;
+    data->output_params.sampleFormat = paInt16;
+    data->output_params.suggestedLatency = outputDeviceInfo->defaultLowOutputLatency;
+    data->output_params.hostApiSpecificStreamInfo = NULL;
+    
+    LOG_INFO("输出设备: %s, 通道数: %d (请求: %d, 最大: %d)", 
+             outputDeviceInfo->name, outputChannels, channels, outputDeviceInfo->maxOutputChannels);
+    
+    // 分配环形缓冲区
+    data->record_buffer_size = buffer_size * channels;
+    data->play_buffer_size = buffer_size * channels;
+    
+    data->record_buffer = (int16_t*)malloc(data->record_buffer_size * sizeof(int16_t));
+    data->play_buffer = (int16_t*)malloc(data->play_buffer_size * sizeof(int16_t));
+    
+    if (!data->record_buffer || !data->play_buffer) {
+        LOG_ERROR("分配音频缓冲区失败");
+        return;
+    }
+    
+    memset(data->record_buffer, 0, data->record_buffer_size * sizeof(int16_t));
+    memset(data->play_buffer, 0, data->play_buffer_size * sizeof(int16_t));
+    
+    LOG_INFO("音频配置设置: %u Hz, %d 通道, %d 帧大小", 
+             sample_rate, channels, frame_size);
+}
+
+// ============================================================================
+// 音量控制函数实现
+// ============================================================================
+
+static int portaudio_mac_set_output_volume(AudioInterface* self, int volume) {
+    if (!self) {
+        LOG_ERROR("无效的音频接口");
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    // 限制音量范围
+    if (volume < AUDIO_VOLUME_MIN) volume = AUDIO_VOLUME_MIN;
+    if (volume > AUDIO_VOLUME_MAX) volume = AUDIO_VOLUME_MAX;
+    
+    self->output_volume_ = volume;
+    LOG_INFO("设置输出音量为 %d", volume);
+    
+    // 注意：PortAudio本身不直接支持音量控制，这里只是存储值
+    // 实际的音量控制需要在音频数据处理时应用
+    
+    return AUDIO_SUCCESS;
+}
+
+// ============================================================================
+// 输入输出管理函数实现
+// ============================================================================
+
+static int portaudio_mac_enable_input(AudioInterface* self, bool enable) {
+    if (!self) {
+        LOG_ERROR("无效的音频接口");
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    if (enable == self->input_enabled_) {
+        return AUDIO_SUCCESS; // 状态没有变化
+    }
+    
+    self->input_enabled_ = enable;
+    LOG_INFO("设置输入启用状态为 %s", enable ? "true" : "false");
+    
+    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
+    if (!data) {
+        return AUDIO_SUCCESS;
+    }
+    
+    // 如果正在录制且要禁用输入，停止录制
+    if (!enable && data->input_stream_active && data->input_stream) {
+        Pa_StopStream(data->input_stream);
+        Pa_CloseStream(data->input_stream);
+        data->input_stream = NULL;
+        data->input_stream_active = false;
+        LOG_INFO("由于输入禁用而停止录制");
+    }
+    
+    return AUDIO_SUCCESS;
+}
+
+static int portaudio_mac_enable_output(AudioInterface* self, bool enable) {
+    if (!self) {
+        LOG_ERROR("无效的音频接口");
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    if (enable == self->output_enabled_) {
+        return AUDIO_SUCCESS; // 状态没有变化
+    }
+    
+    self->output_enabled_ = enable;
+    LOG_INFO("设置输出启用状态为 %s", enable ? "true" : "false");
+    
+    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
+    if (!data) {
+        return AUDIO_SUCCESS;
+    }
+    
+    // 如果正在播放且要禁用输出，停止播放
+    if (!enable && data->output_stream_active && data->output_stream) {
+        Pa_StopStream(data->output_stream);
+        Pa_CloseStream(data->output_stream);
+        data->output_stream = NULL;
+        data->output_stream_active = false;
+        LOG_INFO("由于输出禁用而停止播放");
+    }
+    
+    return AUDIO_SUCCESS;
+}
+
+// ============================================================================
+// 高级数据处理函数实现（对齐AudioCodec::OutputData和InputData）
+// ============================================================================
+
+static int portaudio_mac_output_data(AudioInterface* self, const int16_t* data, size_t samples) {
+    if (!self || !data || samples == 0) {
+        LOG_ERROR("输出数据参数无效");
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    // 检查输出是否启用
+    if (!self->output_enabled_) {
+        LOG_WARN("输出已禁用，忽略输出数据调用");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    // 应用音量控制
+    if (self->output_volume_ != 100) {
+        // 创建临时缓冲区应用音量
+        int16_t* temp_buffer = (int16_t*)malloc(samples * sizeof(int16_t));
+        if (!temp_buffer) {
+            LOG_ERROR("分配音量控制临时缓冲区失败");
+            return portaudio_mac_write(self, data, samples);
+        }
+        
+        float volume_factor = self->output_volume_ / 100.0f;
+        for (size_t i = 0; i < samples; i++) {
+            temp_buffer[i] = (int16_t)(data[i] * volume_factor);
+        }
+        
+        int result = portaudio_mac_write(self, temp_buffer, samples);
+        free(temp_buffer);
+        return result;
+    } else {
+        // 直接写入，无需音量调整
+        return portaudio_mac_write(self, data, samples);
+    }
+}
+
+static int portaudio_mac_input_data(AudioInterface* self, int16_t* data, size_t samples) {
+    if (!self || !data || samples == 0) {
+        LOG_ERROR("输入数据参数无效");
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    // 检查输入是否启用
+    if (!self->input_enabled_) {
+        LOG_WARN("输入已禁用，忽略输入数据调用");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    return portaudio_mac_read(self, data, samples);
+}
+
+// ============================================================================
+// 底层读写函数实现（对齐AudioCodec::Read和Write）
+// ============================================================================
+
+static int portaudio_mac_read(AudioInterface* self, int16_t* dest, size_t samples) {
+    if (!self || !self->impl_data || !dest) {
+        LOG_ERROR("读取参数无效");
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
+    
+    // 如果输入流未激活，尝试启动
+    if (!data->input_stream_active) {
+        int result = _start_input_stream(self);
+        if (result != AUDIO_SUCCESS) {
+            return result;
+        }
+    }
+    
+    pthread_mutex_lock(&data->record_mutex);
+    
+    size_t available_data = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
+    
+    if (available_data < samples) {
+        // 等待更多数据
+        struct timespec timeout;
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_sec += 1; // 1秒超时
+        
+        int result = pthread_cond_timedwait(&data->record_cond, &data->record_mutex, &timeout);
+        if (result != 0) {
+            pthread_mutex_unlock(&data->record_mutex);
+            return AUDIO_ERROR_TIMEOUT;
+        }
+        
+        available_data = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
+    }
+    
+    if (available_data >= samples) {
+        for (size_t i = 0; i < samples; i++) {
+            dest[i] = data->record_buffer[data->record_read_pos];
+            data->record_read_pos = (data->record_read_pos + 1) % data->record_buffer_size;
+        }
+        pthread_mutex_unlock(&data->record_mutex);
+        return (int)samples; // 返回读取的样本数
+    }
+    
+    pthread_mutex_unlock(&data->record_mutex);
+    return AUDIO_ERROR_TIMEOUT;
+}
+
+static int portaudio_mac_write(AudioInterface* self, const int16_t* data, size_t samples) {
+    if (!self || !self->impl_data || !data) {
+        LOG_ERROR("写入参数无效");
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    PortAudioMacData* pa_data = (PortAudioMacData*)self->impl_data;
+    
+    // 如果输出流未激活，尝试启动
+    if (!pa_data->output_stream_active) {
+        int result = _start_output_stream(self);
+        if (result != AUDIO_SUCCESS) {
+            return result;
+        }
+    }
+    
+    pthread_mutex_lock(&pa_data->play_mutex);
+    
+    size_t available_space = pa_data->play_buffer_size - 
+                            ((pa_data->play_write_pos - pa_data->play_read_pos + pa_data->play_buffer_size) % pa_data->play_buffer_size);
+    
+    if (available_space >= samples) {
+        for (size_t i = 0; i < samples; i++) {
+            pa_data->play_buffer[pa_data->play_write_pos] = data[i];
+            pa_data->play_write_pos = (pa_data->play_write_pos + 1) % pa_data->play_buffer_size;
+        }
+        pthread_mutex_unlock(&pa_data->play_mutex);
+        return (int)samples; // 返回写入的样本数
+    }
+    
+    pthread_mutex_unlock(&pa_data->play_mutex);
+    return AUDIO_ERROR_OVERFLOW;
+}
+
+// ============================================================================
+// 内部辅助函数
+// ============================================================================
+
+static int _start_input_stream(AudioInterface* self) {
+    if (!self || !self->impl_data) {
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
+    
+    if (data->input_stream_active) {
+        return AUDIO_SUCCESS; // 已经激活
+    }
+    
+    // 验证配置是否已设置
+    if (self->sample_rate == 0 || self->frame_size == 0 || self->channels == 0) {
+        LOG_ERROR("音频配置未设置。请先调用set_config。");
+        return AUDIO_ERROR_NOT_INIT;
+    }
+    
+    // 验证输入设备
+    if (data->input_params.device == paNoDevice) {
+        LOG_ERROR("未配置输入设备");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    // 检查设备是否仍然有效
+    const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(data->input_params.device);
+    if (!deviceInfo) {
+        LOG_ERROR("输入设备不再可用");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    LOG_INFO("打开输入流: 设备=%s, 采样率=%u, 通道=%d, 帧大小=%d", 
+             deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
+    
+    PaError err = Pa_OpenStream(&data->input_stream,
+                               &data->input_params,
+                               NULL, // 无输出
+                               self->sample_rate,
+                               self->frame_size,
+                               paClipOff,
+                               _portaudio_record_callback,
+                               self);
+    
+    if (err != paNoError) {
+        LOG_ERROR("打开输入流失败: %s", Pa_GetErrorText(err));
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    err = Pa_StartStream(data->input_stream);
+    if (err != paNoError) {
+        LOG_ERROR("启动输入流失败: %s", Pa_GetErrorText(err));
+        Pa_CloseStream(data->input_stream);
+        data->input_stream = NULL;
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    data->input_stream_active = true;
+    LOG_INFO("录制启动成功");
+    return AUDIO_SUCCESS;
+}
+
+static int _start_output_stream(AudioInterface* self) {
+    if (!self || !self->impl_data) {
+        return AUDIO_ERROR_INVALID;
+    }
+    
+    PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
+    
+    if (data->output_stream_active) {
+        return AUDIO_SUCCESS; // 已经激活
+    }
+    
+    // 验证配置是否已设置
+    if (self->sample_rate == 0 || self->frame_size == 0 || self->channels == 0) {
+        LOG_ERROR("音频配置未设置。请先调用set_config。");
+        return AUDIO_ERROR_NOT_INIT;
+    }
+    
+    // 验证输出设备
+    if (data->output_params.device == paNoDevice) {
+        LOG_ERROR("未配置输出设备");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    // 检查设备是否仍然有效
+    const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(data->output_params.device);
+    if (!deviceInfo) {
+        LOG_ERROR("输出设备不再可用");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    LOG_INFO("打开输出流: 设备=%s, 采样率=%u, 通道=%d, 帧大小=%d", 
+             deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
+    
+    PaError err = Pa_OpenStream(&data->output_stream,
+                               NULL, // 无输入
+                               &data->output_params,
+                               self->sample_rate,
+                               self->frame_size,
+                               paClipOff,
+                               _portaudio_play_callback,
+                               self);
+    
+    if (err != paNoError) {
+        LOG_ERROR("打开输出流失败: %s", Pa_GetErrorText(err));
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    err = Pa_StartStream(data->output_stream);
+    if (err != paNoError) {
+        LOG_ERROR("启动输出流失败: %s", Pa_GetErrorText(err));
+        Pa_CloseStream(data->output_stream);
+        data->output_stream = NULL;
+        return AUDIO_ERROR_DEVICE;
+    }
+    
+    data->output_stream_active = true;
+    LOG_INFO("播放启动成功");
+    return AUDIO_SUCCESS;
+}
+
+// ============================================================================
+// PortAudio回调函数实现
+// ============================================================================
+
+static int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
+                                     unsigned long frame_count,
+                                     const PaStreamCallbackTimeInfo* time_info,
+                                     PaStreamCallbackFlags status_flags,
+                                     void* user_data) {
+    AudioInterface* interface = (AudioInterface*)user_data;
+    PortAudioMacData* data = (PortAudioMacData*)interface->impl_data;
+    const int16_t* input = (const int16_t*)input_buffer;
+    
+    if (!input || !data) {
+        return paContinue;
+    }
+    
+    pthread_mutex_lock(&data->record_mutex);
+    
+    size_t samples_to_write = frame_count * interface->channels;
+    // 计算环形缓冲区中已使用的空间
+    size_t used_space = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
+    // 可用空间是缓冲区大小减去已使用空间再减1（用于区分满和空）
+    size_t available_space = data->record_buffer_size - used_space - 1;
+    
+    if (samples_to_write <= available_space) {
+        for (size_t i = 0; i < samples_to_write; i++) {
+            data->record_buffer[data->record_write_pos] = input[i];
+            data->record_write_pos = (data->record_write_pos + 1) % data->record_buffer_size;
+        }
+        pthread_cond_signal(&data->record_cond);
+    } else {
+        // 缓冲区溢出 - 记录警告但继续
+        static int overflow_count = 0;
+        overflow_count++;
+        if (overflow_count % 10 == 1) { // 每10次溢出只打印一次日志
+            LOG_WARN("录制缓冲区溢出 #%d，丢弃 %lu 样本（缓冲区使用: %zu/%zu）", 
+                     overflow_count, samples_to_write, used_space, data->record_buffer_size);
+        }
+    }
+    
+    pthread_mutex_unlock(&data->record_mutex);
+    
+    return paContinue;
+}
+
+static int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
+                                   unsigned long frame_count,
+                                   const PaStreamCallbackTimeInfo* time_info,
+                                   PaStreamCallbackFlags status_flags,
+                                   void* user_data) {
+    AudioInterface* interface = (AudioInterface*)user_data;
+    PortAudioMacData* data = (PortAudioMacData*)interface->impl_data;
+    int16_t* output = (int16_t*)output_buffer;
+    
+    if (!output || !data) {
+        return paContinue;
+    }
+    
+    pthread_mutex_lock(&data->play_mutex);
+    
+    size_t samples_to_read = frame_count * interface->channels;
+    // 计算环形缓冲区中可用的数据
+    size_t available_data = (data->play_write_pos - data->play_read_pos + data->play_buffer_size) % data->play_buffer_size;
+    
+    if (samples_to_read <= available_data) {
+        for (size_t i = 0; i < samples_to_read; i++) {
+            output[i] = data->play_buffer[data->play_read_pos];
+            data->play_read_pos = (data->play_read_pos + 1) % data->play_buffer_size;
+        }
+    } else {
+        // 数据不足，输出静音
+        memset(output, 0, samples_to_read * sizeof(int16_t));
+        // LOG_DEBUG("播放缓冲区欠载，为 %lu 样本输出静音", samples_to_read);
+    }
+    
+    pthread_mutex_unlock(&data->play_mutex);
+    
+    return paContinue;
+}
+
+#else // !PORTAUDIO_AVAILABLE
+
+// PortAudio不可用时的桩实现
+AudioInterface* portaudio_mac_create(void) {
+    LOG_ERROR("PortAudio不可用，无法创建PortAudio Mac实现");
+    return NULL;
+}
+
+#endif // PORTAUDIO_AVAILABLE
