@@ -1,5 +1,5 @@
 #include "audio_processor_mac.h"
-#include "linx_log.h"
+#include "common/log/linx_log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -312,7 +312,7 @@ static audio_processor_error_t mac_processor_feed(AudioProcessor* self,
     memcpy(data->output_buffer, data->input_buffer, samples_to_process * sizeof(int16_t));
     
     // VAD处理
-        mac_vad_state_enum_t vad_state = MAC_VAD_STATE_SILENCE;
+    mac_vad_state_enum_t vad_state = MAC_VAD_STATE_SILENCE;
     if (data->config.enable_vad && data->vad_state.enabled) {
         vad_state = mac_vad_process(data, data->input_buffer, samples_to_process);
         

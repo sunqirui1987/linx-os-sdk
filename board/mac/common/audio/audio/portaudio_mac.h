@@ -40,6 +40,9 @@
         #define paInt16 0x00000008
         #define paClipOff 0x00000001
         #define paContinue 0
+        #define paTimedOut -1
+        #define paOutputUnderflowed -2
+        #define paOutputOverflowed -3
     #endif
 #endif
 

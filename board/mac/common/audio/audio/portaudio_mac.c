@@ -1,9 +1,12 @@
 #include "portaudio_mac.h"
 #include "common/log/linx_log.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
 #define PORTAUDIO_AVAILABLE 1
+
 #if PORTAUDIO_AVAILABLE
 
 /**
@@ -51,17 +54,17 @@ static void portaudio_mac_set_config(AudioInterface* self, unsigned int sample_r
                                      int channels, int periods, int buffer_size, int period_size);
 
 // PortAudio回调函数前向声明
-static int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
-                                     unsigned long frame_count,
-                                     const PaStreamCallbackTimeInfo* time_info,
-                                     PaStreamCallbackFlags status_flags,
-                                     void* user_data);
+// static int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
+//                                      unsigned long frame_count,
+//                                      const PaStreamCallbackTimeInfo* time_info,
+//                                      PaStreamCallbackFlags status_flags,
+//                                      void* user_data);
 
-static int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
-                                   unsigned long frame_count,
-                                   const PaStreamCallbackTimeInfo* time_info,
-                                   PaStreamCallbackFlags status_flags,
-                                   void* user_data);
+// static int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
+//                                    unsigned long frame_count,
+//                                    const PaStreamCallbackTimeInfo* time_info,
+//                                    PaStreamCallbackFlags status_flags,
+//                                    void* user_data);
 
 // 内部辅助函数前向声明
 static int _start_input_stream(AudioInterface* self);
@@ -175,6 +178,23 @@ static int portaudio_mac_start(AudioInterface* self) {
     portaudio_mac_enable_input(self, true);
     portaudio_mac_enable_output(self, true);
     
+    // 启动音频流
+    if (self->input_enabled_) {
+        int result = _start_input_stream(self);
+        if (result != AUDIO_SUCCESS) {
+            LOG_ERROR("启动输入流失败");
+            return result;
+        }
+    }
+    
+    if (self->output_enabled_) {
+        int result = _start_output_stream(self);
+        if (result != AUDIO_SUCCESS) {
+            LOG_ERROR("启动输出流失败");
+            return result;
+        }
+    }
+    
     LOG_INFO("PortAudio Mac接口启动成功");
     return AUDIO_SUCCESS;
 }
@@ -217,9 +237,11 @@ static int portaudio_mac_destroy(AudioInterface* self) {
     pthread_cond_destroy(&data->record_cond);
     pthread_cond_destroy(&data->play_cond);
     
+    // 释放数据结构
     free(data);
     self->impl_data = NULL;
     
+    // 终止PortAudio
     if (self->is_initialized) {
         Pa_Terminate();
     }
@@ -468,46 +490,27 @@ static int portaudio_mac_read(AudioInterface* self, int16_t* dest, size_t sample
         return AUDIO_ERROR_INVALID;
     }
     
+    // 检查输入是否启用
+    if (!self->input_enabled_) {
+        LOG_WARN("音频输入未启用");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
     PortAudioMacData* data = (PortAudioMacData*)self->impl_data;
     
-    // 如果输入流未激活，尝试启动
-    if (!data->input_stream_active) {
-        int result = _start_input_stream(self);
-        if (result != AUDIO_SUCCESS) {
-            return result;
-        }
-    }
-    
-    pthread_mutex_lock(&data->record_mutex);
-    
-    size_t available_data = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
-    
-    if (available_data < samples) {
-        // 等待更多数据
-        struct timespec timeout;
-        clock_gettime(CLOCK_REALTIME, &timeout);
-        timeout.tv_sec += 1; // 1秒超时
-        
-        int result = pthread_cond_timedwait(&data->record_cond, &data->record_mutex, &timeout);
-        if (result != 0) {
-            pthread_mutex_unlock(&data->record_mutex);
+    // 直接使用PortAudio的读取函数
+    PaError err = Pa_ReadStream(data->input_stream, dest, samples);
+    if (err != paNoError) {
+        if (err == paTimedOut) {
+            LOG_WARN("音频输入流读取超时");
             return AUDIO_ERROR_TIMEOUT;
+        } else {
+            LOG_ERROR("音频输入流读取错误: %s", Pa_GetErrorText(err));
+            return AUDIO_ERROR_DEVICE;
         }
-        
-        available_data = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
     }
     
-    if (available_data >= samples) {
-        for (size_t i = 0; i < samples; i++) {
-            dest[i] = data->record_buffer[data->record_read_pos];
-            data->record_read_pos = (data->record_read_pos + 1) % data->record_buffer_size;
-        }
-        pthread_mutex_unlock(&data->record_mutex);
-        return (int)samples; // 返回读取的样本数
-    }
-    
-    pthread_mutex_unlock(&data->record_mutex);
-    return AUDIO_ERROR_TIMEOUT;
+    return (int)samples;
 }
 
 static int portaudio_mac_write(AudioInterface* self, const int16_t* data, size_t samples) {
@@ -516,32 +519,22 @@ static int portaudio_mac_write(AudioInterface* self, const int16_t* data, size_t
         return AUDIO_ERROR_INVALID;
     }
     
+    // 检查输出是否启用
+    if (!self->output_enabled_) {
+        LOG_WARN("音频输出未启用");
+        return AUDIO_ERROR_DEVICE;
+    }
+    
     PortAudioMacData* pa_data = (PortAudioMacData*)self->impl_data;
     
-    // 如果输出流未激活，尝试启动
-    if (!pa_data->output_stream_active) {
-        int result = _start_output_stream(self);
-        if (result != AUDIO_SUCCESS) {
-            return result;
-        }
+    // 直接使用PortAudio的写入函数
+    PaError err = Pa_WriteStream(pa_data->output_stream, data, samples);
+    if (err != paNoError) {
+        LOG_ERROR("音频输出流写入错误: %s", Pa_GetErrorText(err));
+        return AUDIO_ERROR_DEVICE;      
     }
     
-    pthread_mutex_lock(&pa_data->play_mutex);
-    
-    size_t available_space = pa_data->play_buffer_size - 
-                            ((pa_data->play_write_pos - pa_data->play_read_pos + pa_data->play_buffer_size) % pa_data->play_buffer_size);
-    
-    if (available_space >= samples) {
-        for (size_t i = 0; i < samples; i++) {
-            pa_data->play_buffer[pa_data->play_write_pos] = data[i];
-            pa_data->play_write_pos = (pa_data->play_write_pos + 1) % pa_data->play_buffer_size;
-        }
-        pthread_mutex_unlock(&pa_data->play_mutex);
-        return (int)samples; // 返回写入的样本数
-    }
-    
-    pthread_mutex_unlock(&pa_data->play_mutex);
-    return AUDIO_ERROR_OVERFLOW;
+    return AUDIO_SUCCESS;
 }
 
 // ============================================================================
@@ -581,14 +574,15 @@ static int _start_input_stream(AudioInterface* self) {
     LOG_INFO("打开输入流: 设备=%s, 采样率=%u, 通道=%d, 帧大小=%d", 
              deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
     
+    // 使用阻塞模式（不使用回调函数）
     PaError err = Pa_OpenStream(&data->input_stream,
                                &data->input_params,
                                NULL, // 无输出
                                self->sample_rate,
                                self->frame_size,
                                paClipOff,
-                               _portaudio_record_callback,
-                               self);
+                               NULL, // 不使用回调函数
+                               NULL); // 不使用用户数据
     
     if (err != paNoError) {
         LOG_ERROR("打开输入流失败: %s", Pa_GetErrorText(err));
@@ -641,14 +635,15 @@ static int _start_output_stream(AudioInterface* self) {
     LOG_INFO("打开输出流: 设备=%s, 采样率=%u, 通道=%d, 帧大小=%d", 
              deviceInfo->name, self->sample_rate, self->channels, self->frame_size);
     
+    // 使用阻塞模式（不使用回调函数）
     PaError err = Pa_OpenStream(&data->output_stream,
                                NULL, // 无输入
                                &data->output_params,
                                self->sample_rate,
                                self->frame_size,
                                paClipOff,
-                               _portaudio_play_callback,
-                               self);
+                               NULL, // 不使用回调函数
+                               NULL); // 不使用用户数据
     
     if (err != paNoError) {
         LOG_ERROR("打开输出流失败: %s", Pa_GetErrorText(err));
@@ -671,83 +666,6 @@ static int _start_output_stream(AudioInterface* self) {
 // ============================================================================
 // PortAudio回调函数实现
 // ============================================================================
-
-static int _portaudio_record_callback(const void* input_buffer, void* output_buffer,
-                                     unsigned long frame_count,
-                                     const PaStreamCallbackTimeInfo* time_info,
-                                     PaStreamCallbackFlags status_flags,
-                                     void* user_data) {
-    AudioInterface* interface = (AudioInterface*)user_data;
-    PortAudioMacData* data = (PortAudioMacData*)interface->impl_data;
-    const int16_t* input = (const int16_t*)input_buffer;
-    
-    if (!input || !data) {
-        return paContinue;
-    }
-    
-    pthread_mutex_lock(&data->record_mutex);
-    
-    size_t samples_to_write = frame_count * interface->channels;
-    // 计算环形缓冲区中已使用的空间
-    size_t used_space = (data->record_write_pos - data->record_read_pos + data->record_buffer_size) % data->record_buffer_size;
-    // 可用空间是缓冲区大小减去已使用空间再减1（用于区分满和空）
-    size_t available_space = data->record_buffer_size - used_space - 1;
-    
-    if (samples_to_write <= available_space) {
-        for (size_t i = 0; i < samples_to_write; i++) {
-            data->record_buffer[data->record_write_pos] = input[i];
-            data->record_write_pos = (data->record_write_pos + 1) % data->record_buffer_size;
-        }
-        pthread_cond_signal(&data->record_cond);
-    } else {
-        // 缓冲区溢出 - 记录警告但继续
-        static int overflow_count = 0;
-        overflow_count++;
-        if (overflow_count % 10 == 1) { // 每10次溢出只打印一次日志
-            LOG_WARN("录制缓冲区溢出 #%d，丢弃 %lu 样本（缓冲区使用: %zu/%zu）", 
-                     overflow_count, samples_to_write, used_space, data->record_buffer_size);
-        }
-    }
-    
-    pthread_mutex_unlock(&data->record_mutex);
-    
-    return paContinue;
-}
-
-static int _portaudio_play_callback(const void* input_buffer, void* output_buffer,
-                                   unsigned long frame_count,
-                                   const PaStreamCallbackTimeInfo* time_info,
-                                   PaStreamCallbackFlags status_flags,
-                                   void* user_data) {
-    AudioInterface* interface = (AudioInterface*)user_data;
-    PortAudioMacData* data = (PortAudioMacData*)interface->impl_data;
-    int16_t* output = (int16_t*)output_buffer;
-    
-    if (!output || !data) {
-        return paContinue;
-    }
-    
-    pthread_mutex_lock(&data->play_mutex);
-    
-    size_t samples_to_read = frame_count * interface->channels;
-    // 计算环形缓冲区中可用的数据
-    size_t available_data = (data->play_write_pos - data->play_read_pos + data->play_buffer_size) % data->play_buffer_size;
-    
-    if (samples_to_read <= available_data) {
-        for (size_t i = 0; i < samples_to_read; i++) {
-            output[i] = data->play_buffer[data->play_read_pos];
-            data->play_read_pos = (data->play_read_pos + 1) % data->play_buffer_size;
-        }
-    } else {
-        // 数据不足，输出静音
-        memset(output, 0, samples_to_read * sizeof(int16_t));
-        // LOG_DEBUG("播放缓冲区欠载，为 %lu 样本输出静音", samples_to_read);
-    }
-    
-    pthread_mutex_unlock(&data->play_mutex);
-    
-    return paContinue;
-}
 
 #else // !PORTAUDIO_AVAILABLE
 

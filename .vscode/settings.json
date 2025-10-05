@@ -101,10 +101,13 @@
         "${workspaceFolder}/src/**",
         "${workspaceFolder}/board",
         "${workspaceFolder}/board/**",
+        "${workspaceFolder}/src/common",
         "${workspaceFolder}/src/common/std",
         "${workspaceFolder}/src/audio",
         "${workspaceFolder}/src/audio/processor",
         "${workspaceFolder}/board/mac/common/audio/processor",
-        "${workspaceFolder}/src/audio/audio"
+        "${workspaceFolder}/src/audio/audio",
+        "${workspaceFolder}/board/mac/common/audio",
+        "${workspaceFolder}/board/mac/common"
     ]
 }

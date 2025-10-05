@@ -23,6 +23,17 @@ find_library(AUDIOTOOLBOX_LIBRARY AudioToolbox)
 find_library(AUDIOUNIT_LIBRARY AudioUnit)
 find_library(COREFOUNDATION_LIBRARY CoreFoundation)
 
+# 查找PortAudio库
+find_path(PORTAUDIO_INCLUDE_DIR
+    NAMES portaudio.h
+    PATHS /usr/local/include /opt/homebrew/include
+    DOC "PortAudio include directory")
+
+find_library(PORTAUDIO_LIBRARY
+    NAMES portaudio
+    PATHS /usr/local/lib /opt/homebrew/lib
+    DOC "PortAudio library")
+
 # 包含目录
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -32,26 +43,36 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio/processor
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src
-    /usr/local/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/common/log
+    ${PORTAUDIO_INCLUDE_DIR}
 )
 
 # 源文件
 set(TEST_SOURCES
     audio_processor_mac_test.c
+    audio_processor_mac_realtime_test.c
 )
 
 set(MAC_PROCESSOR_SOURCES
     ../../../../board/mac/common/audio/processor/audio_processor_mac.c
+    ../../../../board/mac/common/audio/audio/portaudio_mac.c
 )
 
 set(COMMON_SOURCES
     ../audio_processor.c
     ../../../common/log/linx_log.c
+    ../../audio/audio_interface.c
 )
 
 # 创建测试可执行文件
 add_executable(audio_processor_mac_test 
-    ${TEST_SOURCES}
+    audio_processor_mac_test.c
+    ${MAC_PROCESSOR_SOURCES}
+    ${COMMON_SOURCES}
+)
+
+add_executable(audio_processor_mac_realtime_test
+    audio_processor_mac_realtime_test.c
     ${MAC_PROCESSOR_SOURCES}
     ${COMMON_SOURCES}
 )
@@ -62,6 +83,17 @@ target_link_libraries(audio_processor_mac_test
     ${AUDIOTOOLBOX_LIBRARY}
     ${AUDIOUNIT_LIBRARY}
     ${COREFOUNDATION_LIBRARY}
+    ${PORTAUDIO_LIBRARY}
+    Threads::Threads
+    m
+)
+
+target_link_libraries(audio_processor_mac_realtime_test
+    ${COREAUDIO_LIBRARY}
+    ${AUDIOTOOLBOX_LIBRARY}
+    ${AUDIOUNIT_LIBRARY}
+    ${COREFOUNDATION_LIBRARY}
+    ${PORTAUDIO_LIBRARY}
     Threads::Threads
     m
 )
@@ -74,6 +106,19 @@ target_include_directories(audio_processor_mac_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio/processor
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/common/log
+    ${PORTAUDIO_INCLUDE_DIR}
+)
+
+target_include_directories(audio_processor_mac_realtime_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio/processor
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/mac/common/audio
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/common/log
+    ${PORTAUDIO_INCLUDE_DIR}
 )
 
 # 添加自定义目标用于清理
@@ -91,4 +136,6 @@ message(STATUS "Audio Processor Mac Test Configuration:")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "  C flags: ${CMAKE_C_FLAGS}")
+message(STATUS "  PortAudio include: ${PORTAUDIO_INCLUDE_DIR}")
+message(STATUS "  PortAudio library: ${PORTAUDIO_LIBRARY}")
 message(STATUS "")

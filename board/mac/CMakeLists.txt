@@ -175,6 +175,9 @@ message(STATUS "===============================")
 # Create the Mac board static library
 add_library(linx_board_mac STATIC ${MAC_AUDIO_SOURCES})
 
+# Include processor-specific CMakeLists.txt
+add_subdirectory(common/audio/processor)
+
 # Set library properties
 set_target_properties(linx_board_mac PROPERTIES
     OUTPUT_NAME linx_board_mac

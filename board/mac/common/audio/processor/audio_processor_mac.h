@@ -2,8 +2,8 @@
 #define AUDIO_PROCESSOR_MAC_H
 
 #include "processor/audio_processor.h"
-#include "../audio/audio_interface.h"
-#include "../common/std/vector.h"
+#include "audio/audio_interface.h"
+#include "common/std/vector.h"
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
 #include <AudioUnit/AudioUnit.h>
