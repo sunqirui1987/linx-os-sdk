@@ -1,254 +1,268 @@
-# Mac音频处理器实现
+# SpeexDSP 音频处理器
 
-本目录包含了专为Mac平台优化的音频处理器实现，基于Core Audio框架和Accelerate框架提供高性能的音频处理功能。
+## 概述
 
-## 功能特性
-
-### 核心功能
-- **VAD (语音活动检测)**: 基于能量和过零率的自适应语音检测
-- **AEC (回声消除)**: NLMS自适应滤波器实现的回声消除
-- **NS (噪声抑制)**: 基于能量门限的噪声抑制
-- **实时处理**: 低延迟音频处理管道
-
-### Mac平台优化
-- 使用Core Audio框架进行音频I/O
-- 利用Accelerate框架进行高性能数学运算
-- 针对macOS音频子系统优化的缓冲区管理
-- 支持多种音频格式和采样率
+本目录包含基于SpeexDSP库的音频处理器实现，提供了回声消除(AEC)、噪声抑制(NS)和语音活动检测(VAD)功能。该实现遵循标准的 `audio_processor.h` 接口，可以与其他音频处理器实现互换使用。
 
 ## 文件结构
 
 ```
-processor/
-├── audio_processor_mac.h    # Mac音频处理器头文件
-├── audio_processor_mac.c    # Mac音频处理器实现
-└── README.md               # 本文档
+audio/processor/
+├── audio_processor_speexdsp.h    # SpeexDSP音频处理器头文件
+├── audio_processor_speexdsp.c    # SpeexDSP音频处理器实现
+├── README.md                     # 本文档
+└── test/                         # 测试代码
+    ├── CMakeLists.txt
+    ├── README.md
+    └── audio_processor_mac_realtime_test.c
 ```
 
-## 技术实现
+## 功能特性
 
-### VAD (语音活动检测)
+### 1. 回声消除 (AEC)
+- 基于SpeexDSP的自适应回声消除算法
+- 支持可配置的滤波器长度（默认200ms）
+- 自动适应不同的声学环境
+- 支持运行时参数调整
 
-VAD实现基于以下特征：
+### 2. 噪声抑制 (NS)
+- 基于频谱减法的噪声抑制
+- 可配置的噪声抑制强度（-15到0 dB）
+- 自适应噪声估计
+- 保持语音质量的同时有效降噪
 
-1. **能量检测**: 计算音频帧的RMS能量
-2. **过零率**: 统计信号过零点的频率
-3. **自适应阈值**: 根据历史数据动态调整检测阈值
-4. **状态机**: 包含拖尾时间的状态转换机制
+### 3. 自动增益控制 (AGC)
+- 自动调整音频电平
+- 可配置的目标电平（1到32768）
+- 防止音频削波和过载
+- 保持一致的输出音量
+
+### 4. 语音活动检测 (VAD)
+- 基于能量和频谱特征的VAD算法
+- 实时语音/静音状态检测
+- 支持VAD状态变化回调
+- 提供统计信息（语音帧数、静音帧数）
+
+## API 接口
+
+### 基础接口
 
 ```c
-// VAD特征计算
-float energy = mac_calculate_energy(samples, sample_count);
-float zcr = mac_calculate_zero_crossing_rate(samples, sample_count);
+// 创建SpeexDSP音频处理器实例
+AudioProcessor* audio_processor_speexdsp_create(void);
 
-// 自适应阈值
-float adaptive_threshold = base_threshold + avg_energy * 0.1f;
-
-// VAD决策
-bool is_speech = (energy > adaptive_threshold) && (zcr < zcr_threshold);
+// 销毁音频处理器实例
+void audio_processor_speexdsp_destroy(AudioProcessor* processor);
 ```
 
-### AEC (回声消除)
-
-AEC使用NLMS (Normalized Least Mean Squares) 自适应滤波器：
-
-1. **自适应滤波**: 实时学习回声路径特性
-2. **归一化步长**: 根据参考信号功率调整学习速率
-3. **误差反馈**: 基于误差信号更新滤波器系数
+### 标准音频处理器接口
 
 ```c
-// NLMS滤波器更新
-float step = step_size / (ref_power + epsilon);
-for (size_t j = 0; j < filter_length; j++) {
-    filter_coeffs[j] += step * error * reference_buffer[idx];
-}
+// 初始化音频处理器
+audio_processor_error_t audio_processor_initialize(AudioProcessor* processor,
+                                                   const audio_processor_config_t* config,
+                                                   AudioInterface* audio_interface);
+
+// 启动/停止音频处理器
+audio_processor_error_t audio_processor_start(AudioProcessor* processor);
+audio_processor_error_t audio_processor_stop(AudioProcessor* processor);
+
+// 输入音频数据
+audio_processor_error_t audio_processor_feed(AudioProcessor* processor, 
+                                            const int16_t* data, 
+                                            size_t size);
+
+// 设置回调函数
+audio_processor_error_t audio_processor_set_output_callback(AudioProcessor* processor,
+                                                           audio_processor_output_callback_t callback,
+                                                           void* user_data);
+
+audio_processor_error_t audio_processor_set_vad_callback(AudioProcessor* processor,
+                                                        audio_processor_vad_callback_t callback,
+                                                        void* user_data);
 ```
 
-### NS (噪声抑制)
-
-噪声抑制采用简化的时域方法：
-
-1. **能量估计**: 计算当前帧的能量水平
-2. **噪声底噪跟踪**: 自适应更新噪声底噪估计
-3. **增益控制**: 根据信噪比应用不同的增益因子
+### 扩展接口
 
 ```c
-// 噪声抑制增益计算
-if (frame_energy < noise_threshold) {
-    gain = 0.1f;  // 大幅衰减
-} else if (frame_energy < noise_threshold * 3.0f) {
-    gain = 0.5f;  // 部分抑制
-}
+// 获取统计信息
+audio_processor_error_t audio_processor_speexdsp_get_stats(const AudioProcessor* processor,
+                                                          unsigned long* frames_processed,
+                                                          unsigned long* vad_speech_frames,
+                                                          unsigned long* vad_silence_frames);
+
+// 设置AEC参数
+audio_processor_error_t audio_processor_speexdsp_set_aec_params(AudioProcessor* processor,
+                                                               int filter_length);
+
+// 设置降噪参数
+audio_processor_error_t audio_processor_speexdsp_set_denoise_params(AudioProcessor* processor,
+                                                                   int noise_suppress,
+                                                                   int agc_level);
 ```
-
-## 配置参数
-
-### 音频格式配置
-```c
-audio_processor_config_t config = {
-    .sample_rate = 16000,           // 采样率
-    .channels = 1,                  // 声道数
-    .frame_duration_ms = 60,        // 帧长度
-    .enable_vad = true,             // 启用VAD
-    .enable_aec = true,             // 启用AEC
-    .enable_ns = true,              // 启用噪声抑制
-    .vad_threshold = 0.01f          // VAD阈值
-};
-```
-
-### VAD参数调优
-- `energy_threshold`: 能量检测阈值 (默认: 0.01)
-- `zcr_threshold`: 过零率阈值 (默认: 0.3)
-- `hangover_time`: 拖尾时间 (默认: 500ms)
-- `history_size`: 历史窗口大小 (默认: 50帧)
-
-### AEC参数调优
-- `filter_length`: 滤波器长度 (默认: 512)
-- `step_size`: LMS步长 (默认: 0.01)
-- `convergence_time`: 收敛时间 (约2-5秒)
-
-### NS参数调优
-- `noise_floor`: 噪声底噪 (默认: 0.001)
-- `alpha`: 平滑因子 (默认: 0.95)
-- `suppression_factor`: 抑制因子 (0.1-0.5)
-
-## 性能特性
-
-### 延迟指标
-- **处理延迟**: < 60ms (单帧处理)
-- **算法延迟**: < 10ms (VAD/NS)
-- **AEC延迟**: 取决于滤波器长度
-
-### 计算复杂度
-- **VAD**: O(N) - 线性复杂度
-- **AEC**: O(N×M) - N为帧长，M为滤波器长度
-- **NS**: O(N) - 线性复杂度
-
-### 内存使用
-- **基础缓冲区**: ~16KB (16kHz, 60ms帧)
-- **VAD历史**: ~800B (50帧历史)
-- **AEC滤波器**: ~8KB (512系数 × 4字节 × 4缓冲区)
-- **总内存**: ~25KB
 
 ## 使用示例
 
 ### 基本使用
+
 ```c
-// 创建处理器
-AudioProcessor* processor = audio_processor_mac_create();
+#include "audio_processor_speexdsp.h"
+#include "../../../../src/common/log/linx_log.h"
 
-// 配置参数
-audio_processor_config_t config;
-audio_processor_config_init_default(&config, 16000, 1, 60);
-config.enable_vad = true;
-config.enable_aec = true;
-config.enable_ns = true;
+int main() {
+    // 1. 首先初始化日志系统
+    log_config_t log_config = LOG_DEFAULT_CONFIG;
+    log_config.level = LOG_LEVEL_INFO;  // 设置日志级别
+    log_config.enable_timestamp = true;
+    log_config.enable_color = true;
+    if (log_init(&log_config) != 0) {
+        printf("日志系统初始化失败\n");
+        return -1;
+    }
 
-// 初始化
-audio_processor_initialize(processor, &config, NULL);
+    // 2. 创建音频处理器
+    AudioProcessor* processor = audio_processor_speexdsp_create();
+    if (!processor) {
+        LINX_LOGE("MAIN", "创建音频处理器失败");
+        return -1;
+    }
 
-// 设置回调
+    // 3. 配置参数
+    audio_processor_config_t config;
+    audio_processor_config_init_default(&config, 16000, 1, 20); // 16kHz, 单声道, 20ms帧
+    config.enable_aec = true;
+    config.enable_ns = true;
+    config.enable_vad = true;
+
+    // 4. 初始化
+    AudioInterface* audio_interface = /* 获取音频接口 */;
+    if (audio_processor_initialize(processor, &config, audio_interface) != AUDIO_PROCESSOR_SUCCESS) {
+        LINX_LOGE("MAIN", "音频处理器初始化失败");
+        audio_processor_speexdsp_destroy(processor);
+        return -1;
+    }
+
+// 设置输出回调
 audio_processor_set_output_callback(processor, output_callback, user_data);
+
+// 设置VAD回调
 audio_processor_set_vad_callback(processor, vad_callback, user_data);
 
-// 启动处理
+// 启动处理器
 audio_processor_start(processor);
 
-// 处理音频数据
-audio_processor_feed(processor, audio_data, frame_size);
+// 输入音频数据
+int16_t audio_data[320]; // 20ms @ 16kHz
+audio_processor_feed(processor, audio_data, 320);
 
 // 停止和清理
 audio_processor_stop(processor);
-audio_processor_destroy(processor);
+audio_processor_speexdsp_destroy(processor);
 ```
 
 ### 高级配置
+
 ```c
-// 自定义VAD阈值
-config.vad_threshold = 0.005f;  // 更敏感的检测
+// 调整AEC滤波器长度为300ms
+audio_processor_speexdsp_set_aec_params(processor, 300 * 16); // 300ms * 16kHz
 
-// 启用设备AEC
-audio_processor_enable_device_aec(processor, true);
+// 调整降噪参数
+audio_processor_speexdsp_set_denoise_params(processor, -10, 12000); // -10dB降噪, AGC目标12000
 
-// 重置处理器状态
-audio_processor_reset(processor);
-
-// 查询处理器状态
-bool vad_active = audio_processor_get_vad_status(processor);
-int delay_ms = audio_processor_get_delay_ms(processor);
+// 获取统计信息
+unsigned long frames_processed, speech_frames, silence_frames;
+audio_processor_speexdsp_get_stats(processor, &frames_processed, &speech_frames, &silence_frames);
+printf("处理帧数: %lu, 语音帧: %lu, 静音帧: %lu\n", 
+       frames_processed, speech_frames, silence_frames);
 ```
 
-## 依赖要求
+## 配置参数
 
-### 系统框架
-- **Core Audio**: 音频I/O和格式转换
-- **AudioToolbox**: 音频处理工具
-- **AudioUnit**: 音频单元支持
-- **Accelerate**: 高性能数学运算
-- **CoreFoundation**: 基础系统服务
+### 音频参数
+- **采样率**: 支持8kHz, 16kHz, 32kHz, 48kHz
+- **声道数**: 支持单声道和立体声
+- **帧长度**: 建议10-30ms（默认20ms）
+- **数据格式**: 16位PCM
 
-### 编译要求
-- macOS 10.12 或更高版本
-- Xcode 9.0 或更高版本
-- CMake 3.10 或更高版本
+### SpeexDSP参数
+- **AEC滤波器长度**: 100-500ms（默认200ms）
+- **噪声抑制强度**: -15到0 dB（默认-15dB）
+- **AGC目标电平**: 1-32768（默认8000）
 
-### 运行时要求
-- 音频输入/输出设备
-- 足够的CPU资源 (建议 > 10% 单核)
-- 内存 > 50MB 可用
+## 编译要求
 
-## 调试和优化
+### 依赖库
+- SpeexDSP库 (libspeexdsp)
+- pthread库
+- 标准C库
 
-### 日志级别
+### 编译选项
 ```bash
-export LINX_LOG_LEVEL=DEBUG  # 启用详细日志
+# 启用SpeexDSP支持
+-DENABLE_SPEEX_DSP
+
+# 链接库
+-lspeexdsp -lpthread
 ```
 
-### 性能监控
-```c
-// 获取处理统计
-uint64_t frames_processed = data->frames_processed;
-uint64_t vad_speech_frames = data->vad_speech_frames;
-float processing_load = calculate_cpu_usage();
+### CMake配置示例
+```cmake
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SPEEXDSP REQUIRED speexdsp)
+
+target_compile_definitions(audio_processor_speexdsp PRIVATE ENABLE_SPEEX_DSP)
+target_link_libraries(audio_processor_speexdsp ${SPEEXDSP_LIBRARIES})
+target_include_directories(audio_processor_speexdsp PRIVATE ${SPEEXDSP_INCLUDE_DIRS})
 ```
+
+## 性能特性
+
+### 计算复杂度
+- **AEC**: O(N*M)，其中N为帧长，M为滤波器长度
+- **NS**: O(N*log(N))，基于FFT的频域处理
+- **VAD**: O(N)，时域特征提取
+
+### 内存使用
+- 基础内存: ~50KB
+- AEC滤波器: ~4KB per 100ms filter length
+- 音频缓冲区: 帧长 × 声道数 × 3 × sizeof(int16_t)
+
+### 延迟
+- 算法延迟: 1帧长度（默认20ms）
+- 缓冲延迟: 可忽略
+- 总延迟: ~20-30ms
+
+## 注意事项
+
+1. **线程安全**: 所有API都是线程安全的，使用互斥锁保护共享数据
+2. **内存管理**: 自动管理内部缓冲区，用户只需管理输入/输出数据
+3. **错误处理**: 所有函数都返回错误代码，建议检查返回值
+4. **参数验证**: 输入参数会被验证，无效参数会返回错误
+5. **资源清理**: 必须调用destroy函数释放资源
+
+## 故障排除
 
 ### 常见问题
 
-1. **VAD误检测**
-   - 调整 `vad_threshold` 参数
-   - 检查音频输入增益
-   - 确认环境噪声水平
+1. **编译错误**: 确保安装了SpeexDSP开发库
+2. **运行时错误**: 检查音频参数是否正确配置
+3. **性能问题**: 考虑减少滤波器长度或帧长度
+4. **音质问题**: 调整降噪强度和AGC参数
 
-2. **AEC效果不佳**
-   - 增加滤波器长度
-   - 调整步长参数
-   - 确保参考信号质量
+### 调试建议
 
-3. **处理延迟过高**
-   - 减少帧长度
-   - 优化缓冲区大小
-   - 检查系统负载
+1. 启用详细日志输出
+2. 检查统计信息确认处理状态
+3. 使用测试程序验证功能
+4. 监控CPU和内存使用情况
 
-## 扩展开发
+## 参考资料
 
-### 添加新算法
-1. 在头文件中定义新的状态结构
-2. 实现初始化和处理函数
-3. 集成到主处理流程中
-4. 添加相应的配置参数
+- [SpeexDSP官方文档](https://speex.org/docs/)
+- [音频处理器接口文档](../../../../src/audio/processor/audio_processor.h)
+- [测试代码示例](test/)
 
-### 性能优化
-1. 使用Accelerate框架的向量化函数
-2. 实现SIMD优化的关键算法
-3. 优化内存访问模式
-4. 减少不必要的内存分配
+## 版本历史
 
-### 测试验证
-1. 单元测试各个算法模块
-2. 集成测试完整处理流程
-3. 性能基准测试
-4. 音质主观评测
-
-## 许可证
-
-本实现遵循与主项目相同的许可证条款。
+- v1.0.0: 初始版本，支持基本的AEC、NS、VAD功能
+- 后续版本将添加更多高级功能和优化

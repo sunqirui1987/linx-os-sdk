@@ -4,8 +4,8 @@
 #include <unistd.h>
 #include <signal.h>
 
-// 包含Mac平台的音频处理器和音频接口头文件
-#include "../audio_processor_mac.h"
+// 包含SpeexDSP音频处理器和音频接口头文件
+#include "../audio_processor_speexdsp.h"
 #include "../../audio/portaudio_mac.h"
 #include "../../../../../../src/audio/processor/audio_processor.h"
 #include "../../../../../../src/audio/audio/audio_interface.h"
@@ -19,27 +19,58 @@ void signal_handler(int sig) {
     printf("\n正在停止音频处理...\n");
 }
 
-// 输出回调函数
+// 全局统计变量
+static int g_output_success_count = 0;
+static int g_output_error_count = 0;
+static int g_overflow_count = 0;
+
+// 输出回调函数 - 播放经过AEC处理后的音频
 void output_callback(const int16_t* data, size_t size, void* user_data) {
     // 获取用户数据（音频接口）
     AudioInterface* audio_interface = (AudioInterface*)user_data;
     
+    if (!audio_interface || !data || size == 0) {
+        printf("错误: 音频接口或数据无效\n");
+        g_output_error_count++;
+        return;
+    }
+    
     // 通过音频接口播放处理后的音频
-    if (audio_interface) {
-        int result = audio_interface_output_data(audio_interface, data, size);
-        if (result == 0) {
-            // printf("播放处理后的音频数据: %zu 个样本\n", size);
-        } else if (result == AUDIO_ERROR_OVERFLOW) {
-            static int overflow_count = 0;
-            overflow_count++;
-            if (overflow_count % 50 == 0) { // 每50次只打印一次
-                printf("警告: 音频播放缓冲区溢出 (次数: %d)\n", overflow_count);
+    int result = audio_interface_output_data(audio_interface, data, size);
+    
+    if (result == 0) {
+        // 播放成功
+        g_output_success_count++;
+        
+        // 每1000次成功播放打印一次状态
+        if (g_output_success_count % 1000 == 0) {
+            printf("✓ 已成功播放 %d 帧AEC处理后的音频\n", g_output_success_count);
+        }
+        
+        // 可选：添加音频质量检查
+        if (g_output_success_count % 500 == 0) {
+            // 计算音频能量来验证音频质量
+            long long energy = 0;
+            for (size_t i = 0; i < size; i++) {
+                energy += (long long)data[i] * data[i];
             }
-        } else {
-            printf("播放音频数据失败，错误码: %d\n", result);
+            energy /= size;
+            printf("音频能量检查: %lld (帧 #%d)\n", energy, g_output_success_count);
+        }
+        
+    } else if (result == AUDIO_ERROR_OVERFLOW) {
+        g_overflow_count++;
+        if (g_overflow_count % 10 == 0) { // 每10次溢出打印一次
+            printf("⚠️  音频播放缓冲区溢出 (总计: %d 次)\n", g_overflow_count);
         }
     } else {
-        printf("音频接口为空，无法播放音频\n");
+        g_output_error_count++;
+        printf("❌ 播放AEC处理后音频失败，错误码: %d (总错误: %d)\n", result, g_output_error_count);
+        
+        // 如果错误太多，可能需要重新初始化音频接口
+        if (g_output_error_count > 100) {
+            printf("错误次数过多，可能需要检查音频配置\n");
+        }
     }
 }
 
@@ -59,8 +90,8 @@ int main() {
         return 0;
     }
     
-    printf("Mac实时音频处理器测试 (带AEC和播放功能)\n");
-    printf("=====================================\n");
+    printf("SpeexDSP实时音频处理器测试 (带AEC和播放功能)\n");
+    printf("==========================================\n");
 
     // 创建Mac音频接口（PortAudio实现）
     AudioInterface* audio_interface = portaudio_mac_create();
@@ -79,9 +110,10 @@ int main() {
     }
     printf("✓ 成功初始化音频接口\n");
 
-    // 配置音频接口参数 (增大缓冲区以减少溢出)
-    audio_interface_set_config(audio_interface, 16000, 256, 1, 8, 4096, 512);
-    printf("✓ 设置音频接口配置: 16kHz, 256帧大小, 单声道, 8个周期\n");
+    // 配置音频接口参数 (优化为AEC播放)
+    // 参数: 采样率, 帧大小, 声道数, 周期数, 输入缓冲区大小, 输出缓冲区大小
+    audio_interface_set_config(audio_interface, 16000, 320, 1, 4, 2048, 2048);
+    printf("✓ 设置音频接口配置: 16kHz, 320帧大小, 单声道, 4个周期 (优化AEC播放)\n");
 
     // 明确启用音频输入和输出
     result = audio_interface_enable_input(audio_interface, true);
@@ -108,24 +140,27 @@ int main() {
     }
     printf("✓ 成功启动音频接口\n");
 
-    // 创建Mac音频处理器
-    AudioProcessor* processor = audio_processor_mac_create();
+    // 创建SpeexDSP音频处理器
+    AudioProcessor* processor = audio_processor_speexdsp_create();
     if (!processor) {
-        fprintf(stderr, "错误: 无法创建Mac音频处理器\n");
+        fprintf(stderr, "错误: 无法创建SpeexDSP音频处理器\n");
         audio_interface_destroy(audio_interface);
         return -1;
     }
-    printf("✓ 成功创建Mac音频处理器\n");
+    printf("✓ 成功创建SpeexDSP音频处理器\n");
 
-    // 初始化配置 (减小帧时长以减少延迟)
+    // 初始化配置 (匹配音频接口设置)
     audio_processor_config_t config;
     audio_processor_config_init_default(&config, 16000, 1, 20);
     
-    // 启用所有功能
-    config.enable_aec = true;  // 启用回声消除
-    config.enable_ns = true;
-    config.enable_vad = true;
+    // 启用所有功能，重点是AEC用于播放
+    config.enable_aec = false;   // 启用回声消除 - 关键功能
+    config.enable_ns = false;    // 启用噪声抑制
+    config.enable_vad = true;   // 启用语音活动检测
     config.vad_threshold = 0.01f;
+    
+    // 设置帧大小以匹配音频接口 (320样本 = 20ms @ 16kHz)
+    config.frame_size = 320;
     
     printf("配置参数:\n");
     printf("  采样率: %d Hz\n", config.sample_rate);
@@ -168,7 +203,9 @@ int main() {
     // 设置信号处理
     signal(SIGINT, signal_handler);
     
-    printf("\n开始实时处理音频数据，按Ctrl+C停止...\n");
+    printf("\n🎵 开始实时处理音频数据，按Ctrl+C停止...\n");
+    printf("📢 经过SpeexDSP AEC处理的音频将通过扬声器播放\n");
+    printf("🎤 请对着麦克风说话，您将听到经过回声消除处理的声音\n\n");
     
     // 分配音频缓冲区
     int16_t* input_buffer = (int16_t*)calloc(feed_size, sizeof(int16_t));
@@ -180,42 +217,57 @@ int main() {
         return -1;
     }
 
+    // 重置统计计数器
+    g_output_success_count = 0;
+    g_output_error_count = 0;
+    g_overflow_count = 0;
+
     // 实时处理循环
     int frame_count = 0;
-    int overflow_count = 0;
+    int input_error_count = 0;
     while (running) {
         // 从音频接口读取数据
         result = audio_interface_read(audio_interface, input_buffer, feed_size);
         if (result < 0) {
+            input_error_count++;
             if (result == AUDIO_ERROR_TIMEOUT) {
-                fprintf(stderr, "警告: 读取音频数据超时\n");
+                if (input_error_count % 50 == 0) {
+                    fprintf(stderr, "警告: 读取音频数据超时 (总计: %d 次)\n", input_error_count);
+                }
                 continue; // 继续尝试读取
             } else {
                 fprintf(stderr, "错误: 读取音频数据失败，错误码: %d\n", result);
-                break;
+                if (input_error_count > 100) {
+                    fprintf(stderr, "输入错误过多，退出循环\n");
+                    break;
+                }
+                continue;
             }
         }
         
-        // 处理音频数据
+        // 处理音频数据 (这里会触发AEC处理和音频播放)
         err = audio_processor_feed(processor, input_buffer, feed_size);
         if (err != AUDIO_PROCESSOR_SUCCESS) {
             fprintf(stderr, "错误: 处理音频数据失败 - %s\n", audio_processor_error_to_string(err));
             break;
         }
         
-        // 获取VAD状态并打印（如果检测到语音活动）
+        // 获取VAD状态
         bool vad_status = audio_processor_get_vad_status(processor);
-        if (vad_status) {
-            printf("VAD检测: 语音活动 (帧 #%d)\n", frame_count);
+        if (vad_status && frame_count % 50 == 0) {
+            printf("🗣️  VAD检测: 语音活动 (帧 #%d)\n", frame_count);
         }
-        
+
         frame_count++;
-        if (frame_count % 100 == 0) {
-            printf("已处理 %d 帧音频数据，溢出次数: %d\n", frame_count, overflow_count);
+        
+        // 每200帧打印一次详细状态
+        if (frame_count % 200 == 0) {
+            printf("📊 状态报告 - 处理帧: %d, 播放成功: %d, 播放错误: %d, 溢出: %d\n", 
+                   frame_count, g_output_success_count, g_output_error_count, g_overflow_count);
         }
         
-        // 添加小延迟以减少CPU使用率并缓解缓冲区溢出
-        usleep(5000); // 5ms
+        // 减少延迟以获得更好的实时性能
+        usleep(1000); // 1ms
     }
 
     // 清理资源
@@ -224,6 +276,24 @@ int main() {
     audio_processor_destroy(processor);
     audio_interface_destroy(audio_interface);
     
-    printf("\n实时音频处理测试完成，总共处理了 %d 帧，溢出次数: %d\n", frame_count, overflow_count);
+    // 显示详细的测试结果
+    printf("\n==================================================\n");
+    printf("🎉 SpeexDSP实时音频处理测试完成\n");
+    printf("==================================================\n");
+    printf("📈 处理统计:\n");
+    printf("  • 总处理帧数: %d\n", frame_count);
+    printf("  • 输入错误次数: %d\n", input_error_count);
+    printf("\n📢 播放统计:\n");
+    printf("  • 成功播放帧数: %d\n", g_output_success_count);
+    printf("  • 播放错误次数: %d\n", g_output_error_count);
+    printf("  • 缓冲区溢出次数: %d\n", g_overflow_count);
+    
+    // 计算成功率
+    if (frame_count > 0) {
+        float success_rate = (float)g_output_success_count / frame_count * 100.0f;
+        printf("  • 播放成功率: %.2f%%\n", success_rate);
+    }
+    
+    printf("\n✅ AEC处理后的音频播放测试完成！\n");
     return 0;
 }

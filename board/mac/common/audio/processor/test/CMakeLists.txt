@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(AudioProcessorMacTest)
+project(AudioProcessorSpeexDspTest)
 
 # 设置C标准
 set(CMAKE_C_STANDARD 99)
@@ -34,6 +34,17 @@ find_library(PORTAUDIO_LIBRARY
     PATHS /usr/local/lib /opt/homebrew/lib
     DOC "PortAudio library")
 
+# 查找SpeexDSP库
+find_path(SPEEXDSP_INCLUDE_DIR
+    NAMES speex/speex_echo.h
+    PATHS /usr/local/include /opt/homebrew/include
+    DOC "SpeexDSP include directory")
+
+find_library(SPEEXDSP_LIBRARY
+    NAMES speexdsp
+    PATHS /usr/local/lib /opt/homebrew/lib
+    DOC "SpeexDSP library")
+
 # 包含目录
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -44,15 +55,16 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/audio/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/common/log
     ${PORTAUDIO_INCLUDE_DIR}
+    ${SPEEXDSP_INCLUDE_DIR}
 )
 
 # 源文件
 set(TEST_SOURCES
-    audio_processor_mac_realtime_test.c
+    audio_processor_speexdsp_realtime_test.c
 )
 
-set(MAC_PROCESSOR_SOURCES
-    ../audio_processor_mac.c
+set(SPEEXDSP_PROCESSOR_SOURCES
+    ../audio_processor_speexdsp.c
     ../../audio/portaudio_mac.c
 )
 
@@ -64,29 +76,28 @@ set(COMMON_SOURCES
 
 # 创建测试可执行文件
 
-add_executable(audio_processor_mac_realtime_test
-    audio_processor_mac_realtime_test.c
-    ${MAC_PROCESSOR_SOURCES}
+add_executable(audio_processor_speexdsp_realtime_test
+    audio_processor_speexdsp_realtime_test.c
+    ${SPEEXDSP_PROCESSOR_SOURCES}
     ${COMMON_SOURCES}
 )
 
 # 链接库
 
-
-target_link_libraries(audio_processor_mac_realtime_test
+target_link_libraries(audio_processor_speexdsp_realtime_test
     ${COREAUDIO_LIBRARY}
     ${AUDIOTOOLBOX_LIBRARY}
     ${AUDIOUNIT_LIBRARY}
     ${COREFOUNDATION_LIBRARY}
     ${PORTAUDIO_LIBRARY}
+    ${SPEEXDSP_LIBRARY}
     Threads::Threads
     m
 )
 
 # 设置包含目录属性
 
-
-target_include_directories(audio_processor_mac_realtime_test PRIVATE
+target_include_directories(audio_processor_speexdsp_realtime_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../..
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src
@@ -95,6 +106,7 @@ target_include_directories(audio_processor_mac_realtime_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/audio/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../src/common/log
     ${PORTAUDIO_INCLUDE_DIR}
+    ${SPEEXDSP_INCLUDE_DIR}
 )
 
 # 添加自定义目标用于清理
@@ -108,10 +120,12 @@ add_custom_target(clean-all
 
 # 打印构建信息
 message(STATUS "")
-message(STATUS "Audio Processor Mac Test Configuration:")
+message(STATUS "Audio Processor SpeexDSP Test Configuration:")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "  C flags: ${CMAKE_C_FLAGS}")
 message(STATUS "  PortAudio include: ${PORTAUDIO_INCLUDE_DIR}")
 message(STATUS "  PortAudio library: ${PORTAUDIO_LIBRARY}")
+message(STATUS "  SpeexDSP include: ${SPEEXDSP_INCLUDE_DIR}")
+message(STATUS "  SpeexDSP library: ${SPEEXDSP_LIBRARY}")
 message(STATUS "")
