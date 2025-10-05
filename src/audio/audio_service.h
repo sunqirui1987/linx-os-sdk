@@ -14,6 +14,7 @@
 #include "audio_packet_queue.h"
 #include "audio_task_queue.h"
 #include "timestamp_queue.h"
+#include "../common/std/vector.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -230,6 +231,17 @@ int audio_service_start(AudioService* service);
  */
 void audio_service_stop(AudioService* service);
 
+
+/**
+ * @brief 读取音频数据并进行必要的重采样处理
+ * @param service 音频服务实例
+ * @param data 输出数据vector
+ * @param sample_rate 目标采样率
+ * @param samples 期望的样本数
+ * @return 成功返回0，失败返回负数
+ */
+int audio_service_read_audio_data(AudioService* service, vector_int16_t_t *data, int sample_rate, int samples);
+
 // ============================================================================
 // 组件管理接口
 // ============================================================================
@@ -296,6 +308,16 @@ void audio_service_config_init_default(AudioServiceConfig* config);
 // ============================================================================
 // 数据处理接口
 // ============================================================================
+
+/**
+ * @brief 创建音频任务并推送到编码队列
+ * @param service 音频服务实例
+ * @param type 任务类型
+ * @param pcm_data PCM音频数据
+ * @param data_size 数据大小（字节数）
+ * @return 成功返回true，失败返回false
+ */
+bool audio_service_push_task_to_encode_queue(AudioService* service, AudioTaskType type, int16_t* pcm_data, size_t data_size);
 
 /**
  * @brief 将音频数据包推送到解码队列

@@ -10,6 +10,8 @@
 #include "timestamp_queue.h"
 #include "codecs/opus_codec.h"
 #include "../common/log/linx_log.h"
+#include "../third/opus/silk/SigProc_FIX.h"
+#include "../common/std/vector.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -191,10 +193,21 @@ static void audio_processor_vad_callback(bool speaking, void* user_data) {
 // 工作线程函数
 // ============================================================================
 
+// AudioService::AudioInputTask
 static void* audio_input_thread_func(void* arg) {
-    AudioService* service = (AudioService*)arg;
+    AudioService* service;
+    uint32_t bits;
+    int samples;
+    vector_int16_t_t audio_data;
+    int16_t* mono_data;
+    size_t i, j;
     
-    while (!service->service_stopped) {
+    service = (AudioService*)arg;
+    
+    // 初始化vector
+    vector_int16_t_init(&audio_data);
+    
+    while (1) {
         pthread_mutex_lock(&service->event_mutex);
         while (!(service->event_bits & (AS_EVENT_AUDIO_TESTING_RUNNING | 
                                        AS_EVENT_WAKE_WORD_RUNNING | 
@@ -202,7 +215,7 @@ static void* audio_input_thread_func(void* arg) {
                !service->service_stopped) {
             pthread_cond_wait(&service->audio_queue_cv, &service->event_mutex);
         }
-        uint32_t bits = service->event_bits;
+        bits = service->event_bits;
         pthread_mutex_unlock(&service->event_mutex);
         
         if (service->service_stopped) {
@@ -211,13 +224,12 @@ static void* audio_input_thread_func(void* arg) {
         
         if (service->audio_input_need_warmup) {
             service->audio_input_need_warmup = false;
-            usleep(120000); // 120ms warmup
+            usleep(120000); /* 120ms warmup */
             continue;
         }
         
-        // 处理各种模式的音频输入
+        /* Used for audio testing in NetworkConfiguring mode by clicking the BOOT button */
         if (bits & AS_EVENT_AUDIO_TESTING_RUNNING) {
-            // 音频测试模式处理
             if (audio_packet_queue_size(&service->audio_testing_queue) >= 
                 AUDIO_TESTING_MAX_DURATION_MS / OPUS_FRAME_DURATION_MS) {
                 LINX_LOGW(AUDIO_SERVICE_TAG, "Audio testing queue is full, stopping audio testing");
@@ -226,114 +238,70 @@ static void* audio_input_thread_func(void* arg) {
                 continue;
             }
             
-            // 从音频接口读取数据
-            if (service->audio_interface && service->audio_interface->vtable && service->audio_interface->vtable->read) {
-                int samples = OPUS_FRAME_DURATION_MS * service->config.input_format.sample_rate / 1000;
-                int16_t* data = (int16_t*)malloc(samples * sizeof(int16_t));
-                if (data) {
-                    int result = service->audio_interface->vtable->read(service->audio_interface, data, samples);
-                    if (result > 0) {
-                        // 创建测试数据包
-                        AudioStreamPacket* packet = audio_stream_packet_create();
-                        if (packet) {
-                            audio_stream_packet_set_data(packet, data, result * sizeof(int16_t), &service->config.input_format);
-                            
-                            pthread_mutex_lock(&service->audio_queue_mutex);
-                            if (!audio_packet_queue_push(&service->audio_testing_queue, packet)) {
-                                audio_stream_packet_destroy(packet);
-                            }
-                            pthread_mutex_unlock(&service->audio_queue_mutex);
+            samples = OPUS_FRAME_DURATION_MS * 16000 / 1000;
+            if (audio_service_read_audio_data(service, &audio_data, 16000, samples) == 0) {
+                /* If input channels is 2, we need to fetch the left channel data */
+                if (service->audio_interface->channels == 2) {
+                    mono_data = (int16_t*)malloc(samples * sizeof(int16_t));
+                    if (mono_data) {
+                        int16_t* data_ptr = vector_int16_t_data(&audio_data);
+                        for (i = 0, j = 0; i < (size_t)samples; i++, j += 2) {
+                            mono_data[i] = data_ptr[j];
                         }
+                        audio_service_push_task_to_encode_queue(service, AUDIO_TASK_PROCESS_AUDIO, mono_data, samples * sizeof(int16_t));
+                        free(mono_data);
                     }
-                    free(data);
+                } else {
+                    audio_service_push_task_to_encode_queue(service, AUDIO_TASK_PROCESS_AUDIO, vector_int16_t_data(&audio_data), vector_int16_t_size(&audio_data) * sizeof(int16_t));
                 }
             }
             continue;
         }
         
+        /* Feed the wake word */
         if (bits & AS_EVENT_WAKE_WORD_RUNNING) {
-            // 唤醒词检测处理
-            if (!is_component_available(service, COMPONENT_WAKE_WORD) || !is_component_available(service, COMPONENT_AUDIO_INTERFACE)) {
-                LINX_LOGW(AUDIO_SERVICE_TAG, "Wake word detection enabled but components not available, disabling");
+            if (!is_component_available(service, COMPONENT_WAKE_WORD)) {
+                LINX_LOGW(AUDIO_SERVICE_TAG, "Wake word detection enabled but component not available, disabling");
                 clear_event_bit(service, AS_EVENT_WAKE_WORD_RUNNING);
                 service->current_features.wake_word_detection = false;
                 continue;
             }
             
-            size_t feed_size = wake_word_interface_get_feed_size(service->wake_word);
-            if (feed_size > 0) {
-                int16_t* data = (int16_t*)malloc(feed_size * sizeof(int16_t));
-                if (data) {
-                    int result = service->audio_interface->vtable->read(service->audio_interface, data, feed_size);
-                    if (result > 0) {
-                        wake_word_interface_feed(service->wake_word, data, result);
-                        
-                        // 检查是否检测到唤醒词
-                        const char* wake_word = wake_word_interface_get_last_detected_wake_word(service->wake_word);
-                        if (wake_word) {
-                            trigger_callbacks(service, "wake_word_detected", wake_word);
-                        }
-                    } else if (result < 0) {
-                        LINX_LOGW(AUDIO_SERVICE_TAG, "Audio interface read error: %d", result);
-                    }
-                    free(data);
-                } else {
-                    LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to allocate memory for wake word audio data");
+            samples = wake_word_interface_get_feed_size(service->wake_word);
+            if (samples > 0) {
+                if (audio_service_read_audio_data(service, &audio_data, 16000, samples) == 0) {
+                    wake_word_interface_feed(service->wake_word, vector_int16_t_data(&audio_data), vector_int16_t_size(&audio_data));
                 }
             }
             continue;
         }
         
+        /* Feed the audio processor */
         if (bits & AS_EVENT_AUDIO_PROCESSOR_RUNNING) {
-            // 音频处理器处理
-            if (!is_component_available(service, COMPONENT_AUDIO_PROCESSOR) || !is_component_available(service, COMPONENT_AUDIO_INTERFACE)) {
-                LINX_LOGW(AUDIO_SERVICE_TAG, "Audio processor enabled but components not available, disabling");
+            if (!is_component_available(service, COMPONENT_AUDIO_PROCESSOR)) {
+                LINX_LOGW(AUDIO_SERVICE_TAG, "Audio processor enabled but component not available, disabling");
                 clear_event_bit(service, AS_EVENT_AUDIO_PROCESSOR_RUNNING);
                 service->current_features.voice_processing = false;
                 continue;
             }
             
-            size_t feed_size = audio_processor_get_feed_size(service->audio_processor);
-            LINX_LOGD(AUDIO_SERVICE_TAG, "[RECORD] 音频处理器需要 %zu 个样本", feed_size);
-            
-            if (feed_size > 0) {
-                int16_t* data = (int16_t*)malloc(feed_size * sizeof(int16_t));
-                if (data) {
-                    int result = service->audio_interface->vtable->read(service->audio_interface, data, feed_size);
-                    if (result > 0) {
-                        LINX_LOGI(AUDIO_SERVICE_TAG, "[RECORD] ✅ 成功从音频接口读取 %d 个样本，喂给音频处理器", result);
-                        
-                        // 计算音频数据的能量级别用于调试
-                        float energy = 0.0f;
-                        for (int i = 0; i < result; i++) {
-                            energy += (float)(data[i] * data[i]);
-                        }
-                        energy = sqrtf(energy / result);
-                        LINX_LOGD(AUDIO_SERVICE_TAG, "[RECORD] 音频数据能量级别: %.2f", energy);
-                        
-                        audio_processor_feed(service->audio_processor, data, result);
-                        service->debug_statistics.input_count++;
-                        
-                        LINX_LOGD(AUDIO_SERVICE_TAG, "[RECORD] 已处理音频帧数: %u", service->debug_statistics.input_count);
-                    } else if (result < 0) {
-                        LINX_LOGW(AUDIO_SERVICE_TAG, "[RECORD] ❌ 音频接口读取错误: %d", result);
-                    } else {
-                        LINX_LOGD(AUDIO_SERVICE_TAG, "[RECORD] 音频接口返回0个样本");
-                    }
-                    free(data);
-                } else {
-                    LINX_LOGE(AUDIO_SERVICE_TAG, "[RECORD] ❌ 分配音频处理器数据内存失败");
+            samples = audio_processor_get_feed_size(service->audio_processor);
+            if (samples > 0) {
+                if (audio_service_read_audio_data(service, &audio_data, 16000, samples) == 0) {
+                    audio_processor_feed(service->audio_processor, vector_int16_t_data(&audio_data), vector_int16_t_size(&audio_data));
                 }
-            } else {
-                LINX_LOGW(AUDIO_SERVICE_TAG, "[RECORD] 音频处理器feed_size为0");
             }
             continue;
         }
         
-        usleep(100);
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Should not be here, bits: %x", bits);
+        break;
     }
     
-    LINX_LOGW(AUDIO_SERVICE_TAG, "Audio input thread stopped");
+    // 清理vector资源
+    vector_int16_t_destroy(&audio_data);
+    
+    LINX_LOGW(AUDIO_SERVICE_TAG, "Audio input task stopped");
     return NULL;
 }
 
@@ -914,6 +882,174 @@ void audio_service_stop(AudioService* service) {
     LINX_LOGI(AUDIO_SERVICE_TAG, "Audio service stopped");
 }
 
+int audio_service_read_audio_data(AudioService* service, vector_int16_t_t *data, int sample_rate, int samples) {
+    vector_int16_t_t mic_channel;
+    vector_int16_t_t reference_channel;
+    vector_int16_t_t resampled_mic;
+    vector_int16_t_t resampled_reference;
+    vector_int16_t_t resampled;
+    size_t i, j;
+    int result = 0;
+    
+    if (!service || !data || samples <= 0) {
+        return -1;
+    }
+    
+    // 初始化临时vector
+    vector_int16_t_init(&mic_channel);
+    vector_int16_t_init(&reference_channel);
+    vector_int16_t_init(&resampled_mic);
+    vector_int16_t_init(&resampled_reference);
+    vector_int16_t_init(&resampled);
+    
+    // 检查并启用音频输入（类似C++版本的!codec_->input_enabled()检查）
+    if (!service->audio_interface || !service->audio_interface->vtable) {
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Audio interface not available");
+        result = -1;
+        goto cleanup;
+    }
+    
+    // 启用音频输入（类似C++版本的codec_->EnableInput(true)）
+    if (service->audio_interface->vtable->record) {
+        service->audio_interface->vtable->record(service->audio_interface);
+    }
+    
+    // 获取输入采样率和声道数
+    int input_sample_rate = 16000; // 假设输入采样率为16kHz，实际应该从接口获取
+    int input_channels = service->audio_interface->channels;
+    
+    if (input_sample_rate != sample_rate) {
+        // 需要重采样（类似C++版本的codec_->input_sample_rate() != sample_rate）
+        int required_input_samples = samples * input_sample_rate / sample_rate * input_channels;
+        
+        // 调整data大小并读取数据（类似C++版本的data.resize()）
+        vector_int16_t_resize(data, required_input_samples);
+        
+        // 读取音频数据（类似C++版本的codec_->InputData(data)）
+        if (service->audio_interface->vtable->read) {
+            int read_result = service->audio_interface->vtable->read(
+                service->audio_interface, 
+                vector_int16_t_data(data), 
+                required_input_samples * sizeof(int16_t)
+            );
+            if (read_result < 0) {
+                LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to read audio data");
+                result = -1;
+                goto cleanup;
+            }
+        }
+        
+        if (input_channels == 2) {
+            // 双声道处理：分离麦克风和参考声道（类似C++版本的codec_->input_channels() == 2）
+            size_t channel_samples = vector_int16_t_size(data) / 2;
+            
+            // 创建mic_channel和reference_channel（类似C++版本的auto mic_channel = std::vector<int16_t>(data.size() / 2)）
+            vector_int16_t_resize(&mic_channel, channel_samples);
+            vector_int16_t_resize(&reference_channel, channel_samples);
+            
+            // 分离声道（类似C++版本的for循环分离）
+            int16_t* data_ptr = vector_int16_t_data(data);
+            int16_t* mic_ptr = vector_int16_t_data(&mic_channel);
+            int16_t* ref_ptr = vector_int16_t_data(&reference_channel);
+            
+            for (i = 0, j = 0; i < channel_samples; i++, j += 2) {
+                mic_ptr[i] = data_ptr[j];
+                ref_ptr[i] = data_ptr[j + 1];
+            }
+            
+            // 重采样麦克风声道（类似C++版本的input_resampler_.GetOutputSamples()）
+            size_t resampled_mic_size = channel_samples * sample_rate / input_sample_rate;
+            vector_int16_t_resize(&resampled_mic, resampled_mic_size);
+            
+            // TODO: 这里应该调用实际的重采样器（类似C++版本的input_resampler_.Process()）
+            // 暂时使用简单的线性插值
+            int16_t* resampled_mic_ptr = vector_int16_t_data(&resampled_mic);
+            for (i = 0; i < resampled_mic_size; i++) {
+                size_t src_idx = i * channel_samples / resampled_mic_size;
+                if (src_idx < channel_samples) {
+                    resampled_mic_ptr[i] = mic_ptr[src_idx];
+                }
+            }
+            
+            // 重采样参考声道（类似C++版本的reference_resampler_.Process()）
+            size_t resampled_ref_size = channel_samples * sample_rate / input_sample_rate;
+            vector_int16_t_resize(&resampled_reference, resampled_ref_size);
+            
+            int16_t* resampled_ref_ptr = vector_int16_t_data(&resampled_reference);
+            for (i = 0; i < resampled_ref_size; i++) {
+                size_t src_idx = i * channel_samples / resampled_ref_size;
+                if (src_idx < channel_samples) {
+                    resampled_ref_ptr[i] = ref_ptr[src_idx];
+                }
+            }
+            
+            // 合并重采样后的数据（类似C++版本的data.resize()和交错存储）
+            size_t total_output_samples = resampled_mic_size + resampled_ref_size;
+            vector_int16_t_resize(data, total_output_samples);
+            
+            int16_t* output_ptr = vector_int16_t_data(data);
+            // 交错存储双声道数据（类似C++版本的for循环合并）
+            for (i = 0, j = 0; i < resampled_mic_size && j < total_output_samples - 1; i++, j += 2) {
+                output_ptr[j] = resampled_mic_ptr[i];
+                output_ptr[j + 1] = resampled_ref_ptr[i];
+            }
+            
+        } else {
+            // 单声道处理（类似C++版本的else分支）
+            size_t resampled_size = vector_int16_t_size(data) * sample_rate / input_sample_rate;
+            vector_int16_t_resize(&resampled, resampled_size);
+            
+            // 简单的重采样（实际应该使用专业的重采样器，类似C++版本的input_resampler_.Process()）
+            int16_t* data_ptr = vector_int16_t_data(data);
+            int16_t* resampled_ptr = vector_int16_t_data(&resampled);
+            
+            for (i = 0; i < resampled_size; i++) {
+                size_t src_idx = i * vector_int16_t_size(data) / resampled_size;
+                if (src_idx < vector_int16_t_size(data)) {
+                    resampled_ptr[i] = data_ptr[src_idx];
+                }
+            }
+            
+            // 移动数据到输出vector（类似C++版本的data = std::move(resampled)）
+            vector_int16_t_copy(data, &resampled);
+        }
+        
+    } else {
+        // 不需要重采样，直接读取（类似C++版本的else分支）
+        int required_samples = samples * input_channels;
+        vector_int16_t_resize(data, required_samples);
+        
+        if (service->audio_interface->vtable->read) {
+            int read_result = service->audio_interface->vtable->read(
+                service->audio_interface, 
+                vector_int16_t_data(data), 
+                required_samples * sizeof(int16_t)
+            );
+            if (read_result < 0) {
+                LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to read audio data");
+                result = -1;
+                goto cleanup;
+            }
+        }
+    }
+    
+    // 更新最后输入时间（类似C++版本的last_input_time_ = std::chrono::steady_clock::now()）
+    get_current_time(&service->last_input_time);
+    service->debug_statistics.input_count++;
+    
+    LINX_LOGD(AUDIO_SERVICE_TAG, "Audio data read successfully: %d samples at %d Hz", samples, sample_rate);
+    
+cleanup:
+    // 清理临时vector资源
+    vector_int16_t_destroy(&mic_channel);
+    vector_int16_t_destroy(&reference_channel);
+    vector_int16_t_destroy(&resampled_mic);
+    vector_int16_t_destroy(&resampled_reference);
+    vector_int16_t_destroy(&resampled);
+    
+    return result;
+}
+
 void audio_service_set_callbacks(AudioService* service, const AudioServiceCallbacks* callbacks) {
     if (!service || !callbacks) {
         return;
@@ -973,18 +1109,18 @@ void audio_service_config_init_default(AudioServiceConfig* config) {
     audio_format_default(&config->input_format);
     audio_format_default(&config->output_format);
     
-    // 初始化默认功能配置
-    config->features.wake_word_detection = false;
-    config->features.voice_processing = false;
-    config->features.audio_testing = false;
-    config->features.device_aec = false;
-    config->features.noise_suppression = false;
-    config->features.voice_activity_detection = false;
+    // 初始化默认功能配置 - 像C++版本一样默认启用主要功能
+    config->features.wake_word_detection = false;        // 唤醒词检测需要外部模型，默认关闭
+    config->features.voice_processing = true;           // 默认启用语音处理
+    config->features.audio_testing = false;             // 音频测试默认关闭
+    config->features.device_aec = true;                  // 默认启用设备AEC（回声消除）
+    config->features.noise_suppression = true;          // 默认启用噪声抑制
+    config->features.voice_activity_detection = true;   // 默认启用语音活动检测
     
     // 初始化模型列表
     config->models_list = NULL;
     
-    LINX_LOGI(AUDIO_SERVICE_TAG, "Audio service config initialized with default values");
+    LINX_LOGI(AUDIO_SERVICE_TAG, "Audio service config initialized with default values (AEC, NS, VAD enabled)");
 }
 
 
@@ -1151,6 +1287,71 @@ int audio_service_get_features(const AudioService* service, AudioServiceFeatures
 // ============================================================================
 // 数据处理接口实现
 // ============================================================================
+
+bool audio_service_push_task_to_encode_queue(AudioService* service, AudioTaskType type, int16_t* pcm_data, size_t data_size) {
+    if (!service || !pcm_data || data_size == 0) {
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Push task to encode queue failed: invalid parameters");
+        return false;
+    }
+    
+    // 创建音频数据副本
+    int16_t* data_copy = (int16_t*)malloc(data_size);
+    if (!data_copy) {
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Push task to encode queue failed: memory allocation failed");
+        return false;
+    }
+    memcpy(data_copy, pcm_data, data_size);
+    
+    // 创建音频任务
+    AudioTask* task = audio_task_create(type, data_copy, data_size);
+    if (!task) {
+        free(data_copy);
+        LINX_LOGE(AUDIO_SERVICE_TAG, "Push task to encode queue failed: task creation failed");
+        return false;
+    }
+    
+    pthread_mutex_lock(&service->audio_queue_mutex);
+    
+    // 如果任务类型是发送到发送队列，需要设置时间戳
+    if (type == AUDIO_TASK_PROCESS_AUDIO && !timestamp_queue_is_empty(&service->timestamp_queue)) {
+        if (timestamp_queue_size(&service->timestamp_queue) <= MAX_TIMESTAMPS_IN_QUEUE) {
+            uint32_t timestamp = 0;
+            if (timestamp_queue_pop(&service->timestamp_queue, &timestamp)) {
+                task->timestamp = timestamp;
+            }
+        } else {
+            LINX_LOGW(AUDIO_SERVICE_TAG, "Timestamp queue (%zu) is full, dropping timestamp", 
+                     timestamp_queue_size(&service->timestamp_queue));
+            uint32_t timestamp = 0;
+            timestamp_queue_pop(&service->timestamp_queue, &timestamp);
+            task->timestamp = timestamp;
+        }
+    }
+    
+    // 等待编码队列有空间
+    while (audio_task_queue_size(&service->audio_encode_queue) >= MAX_ENCODE_TASKS_IN_QUEUE && !service->service_stopped) {
+        pthread_cond_wait(&service->audio_queue_cv, &service->audio_queue_mutex);
+    }
+    
+    bool result = false;
+    if (!service->service_stopped) {
+        result = audio_task_queue_push(&service->audio_encode_queue, task);
+        if (result) {
+            pthread_cond_broadcast(&service->audio_queue_cv);
+            LINX_LOGD(AUDIO_SERVICE_TAG, "Task pushed to encode queue successfully, type: %s, queue size: %zu", 
+                     audio_task_type_to_string(type), audio_task_queue_size(&service->audio_encode_queue));
+        } else {
+            LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to push task to encode queue");
+            audio_task_destroy(task);
+        }
+    } else {
+        LINX_LOGW(AUDIO_SERVICE_TAG, "Service stopped, discarding task");
+        audio_task_destroy(task);
+    }
+    
+    pthread_mutex_unlock(&service->audio_queue_mutex);
+    return result;
+}
 
 bool audio_service_push_packet_to_decode_queue(AudioService* service, AudioStreamPacket* packet, bool wait) {
     if (!service || !packet) {
