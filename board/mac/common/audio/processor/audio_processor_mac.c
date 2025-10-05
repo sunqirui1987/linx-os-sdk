@@ -18,7 +18,7 @@
 // 前向声明
 static audio_processor_error_t mac_processor_initialize(AudioProcessor* self,
                                                         const audio_processor_config_t* config,
-                                                        audio_codec_t* codec);
+                                                        AudioInterface* audio_interface);
 static audio_processor_error_t mac_processor_start(AudioProcessor* self);
 static audio_processor_error_t mac_processor_stop(AudioProcessor* self);
 static audio_processor_error_t mac_processor_feed(AudioProcessor* self, 
@@ -168,7 +168,7 @@ void audio_processor_mac_destroy(AudioProcessor* processor) {
 
 static audio_processor_error_t mac_processor_initialize(AudioProcessor* self,
                                                         const audio_processor_config_t* config,
-                                                        audio_codec_t* codec) {
+                                                        AudioInterface* audio_interface) {
     if (!self || !config) {
         LINX_LOGE(MAC_PROCESSOR_TAG, "初始化参数无效");
         return AUDIO_PROCESSOR_ERROR_INVALID_PARAM;
@@ -185,7 +185,7 @@ static audio_processor_error_t mac_processor_initialize(AudioProcessor* self,
     
     // 保存配置
     data->config = *config;
-    data->codec = codec;
+    data->audio_interface = audio_interface;
     
     // 计算缓冲区大小
     data->buffer_size = (config->sample_rate * config->frame_duration_ms) / 1000;

@@ -10,7 +10,6 @@
         "vector": "c",
         "linx_log.h": "c",
         "__locale": "cpp",
-        "ios": "cpp",
         "__assert": "cpp",
         "__assertion_handler": "cpp",
         "__config": "cpp",
@@ -96,5 +95,16 @@
         "wake_word_interface.h": "c",
         "timestamp_queue.h": "c",
         "signal.h": "c"
-    }
+    },
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/src/**",
+        "${workspaceFolder}/board",
+        "${workspaceFolder}/board/**",
+        "${workspaceFolder}/src/common/std",
+        "${workspaceFolder}/src/audio",
+        "${workspaceFolder}/src/audio/processor",
+        "${workspaceFolder}/board/mac/common/audio/processor",
+        "${workspaceFolder}/src/audio/audio"
+    ]
 }

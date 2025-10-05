@@ -1,5 +1,5 @@
 #include "audio_processor.h"
-#include "../common/log/linx_log.h"
+#include "../../common/log/linx_log.h"
 #include <string.h>
 
 /**
@@ -14,7 +14,7 @@
 
 audio_processor_error_t audio_processor_initialize(AudioProcessor* processor,
                                                    const audio_processor_config_t* config,
-                                                   audio_codec_t* codec) {
+                                                   AudioInterface* audio_interface) {
     if (!processor) {
         LINX_LOGE(AUDIO_PROCESSOR_TAG, "音频处理器指针为空");
         return AUDIO_PROCESSOR_ERROR_INVALID_PARAM;
@@ -38,7 +38,7 @@ audio_processor_error_t audio_processor_initialize(AudioProcessor* processor,
     LINX_LOGI(AUDIO_PROCESSOR_TAG, "初始化音频处理器，采样率: %d, 声道数: %d", 
               config->sample_rate, config->channels);
     
-    return processor->vtable->initialize(processor, config, codec);
+    return processor->vtable->initialize(processor, config, audio_interface);
 }
 
 audio_processor_error_t audio_processor_start(AudioProcessor* processor) {

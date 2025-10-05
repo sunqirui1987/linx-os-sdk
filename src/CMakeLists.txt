@@ -73,6 +73,7 @@ target_include_directories(linx_sdk_static PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/linxsdk
     ${CMAKE_CURRENT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/std
     ${CMAKE_CURRENT_SOURCE_DIR}/camera
     ${CMAKE_CURRENT_SOURCE_DIR}/audio
     ${CMAKE_CURRENT_SOURCE_DIR}/display
@@ -153,6 +154,12 @@ install(TARGETS linx_sdk_static linx_common linx_camera linx_audio linx_display 
 # Install component headers with src directory structure
 install(DIRECTORY common/
     DESTINATION include/common
+    FILES_MATCHING PATTERN "*.h"
+    PATTERN "std" EXCLUDE
+)
+
+install(DIRECTORY common/std/
+    DESTINATION include/common/std
     FILES_MATCHING PATTERN "*.h"
 )
 

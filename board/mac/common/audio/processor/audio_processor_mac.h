@@ -2,6 +2,8 @@
 #define AUDIO_PROCESSOR_MAC_H
 
 #include "processor/audio_processor.h"
+#include "../audio/audio_interface.h"
+#include "../common/std/vector.h"
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
 #include <AudioUnit/AudioUnit.h>
@@ -90,7 +92,7 @@ typedef struct {
 typedef struct {
     // 基本配置
     audio_processor_config_t config;
-    audio_codec_t* codec;
+    AudioInterface* audio_interface;  /**< 音频接口 */
     
     // 状态标志
     bool initialized;

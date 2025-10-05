@@ -47,3 +47,13 @@ target_compile_options(simple_test PRIVATE
     -Wextra
     -std=c99
 )
+
+# 创建STD库测试程序
+add_executable(std_test std_test.c)
+target_link_libraries(std_test linx_std)
+target_include_directories(std_test PRIVATE ${STD_DIR})
+target_compile_options(std_test PRIVATE
+    -Wall
+    -Wextra
+    -std=c99
+)

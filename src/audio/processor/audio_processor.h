@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "codecs/audio_codec.h"
+#include "../audio/audio_interface.h"
+#include "../common/std/vector.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,12 +76,12 @@ struct AudioProcessorVTable {
      * @brief 初始化音频处理器
      * @param self 音频处理器实例
      * @param config 配置参数
-     * @param codec 音频编解码器
+     * @param audio_interface 音频接口
      * @return 错误代码
      */
     audio_processor_error_t (*initialize)(AudioProcessor* self, 
                                          const audio_processor_config_t* config,
-                                         audio_codec_t* codec);
+                                         AudioInterface* audio_interface);
     
     /**
      * @brief 启动音频处理器
@@ -185,12 +186,12 @@ struct AudioProcessor {
  * @brief 初始化音频处理器
  * @param processor 音频处理器指针
  * @param config 配置参数
- * @param codec 音频编解码器
+ * @param audio_interface 音频接口
  * @return 错误代码
  */
 audio_processor_error_t audio_processor_initialize(AudioProcessor* processor,
                                                    const audio_processor_config_t* config,
-                                                   audio_codec_t* codec);
+                                                   AudioInterface* audio_interface);
 
 /**
  * @brief 启动音频处理器

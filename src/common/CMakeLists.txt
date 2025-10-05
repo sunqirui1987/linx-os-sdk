@@ -14,6 +14,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/cjson
     ${CMAKE_CURRENT_SOURCE_DIR}/http
     ${CMAKE_CURRENT_SOURCE_DIR}/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/std
     ${CMAKE_CURRENT_SOURCE_DIR}/../third/mongoose
 )
 
@@ -28,6 +29,9 @@ set(LINX_COMMON_SOURCES
     
     # Log sources
     ${CMAKE_CURRENT_SOURCE_DIR}/log/linx_log.c
+    
+    # STD sources
+    ${CMAKE_CURRENT_SOURCE_DIR}/std/vector.c
 )
 
 # Create static library
@@ -49,6 +53,7 @@ target_include_directories(${LINX_COMMON_TARGET} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cjson
     ${CMAKE_CURRENT_SOURCE_DIR}/http
     ${CMAKE_CURRENT_SOURCE_DIR}/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/std
 )
 
 # Compiler flags
@@ -106,6 +111,11 @@ install(FILES
     DESTINATION include/linx_common/log
 )
 
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/std/vector.h
+    DESTINATION include/linx_common/std
+)
+
 # Print build information
 message(STATUS "Building LINX Common Library")
-message(STATUS "  - Combined library: linx_common (includes cJSON, HTTP client, and Log)")
+message(STATUS "  - Combined library: linx_common (includes cJSON, HTTP client, Log, and STD)")
