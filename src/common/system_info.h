@@ -9,135 +9,110 @@
 extern "C" {
 #endif
 
-/**
- * Get flash size in bytes
- * @return Flash size in bytes, 0 if unknown
- */
+// Forward declarations
+typedef struct SystemInfo SystemInfo;
+typedef struct SystemInfoVTable SystemInfoVTable;
+
+// SystemInfo vtable structure - contains function pointers for virtual methods
+struct SystemInfoVTable {
+    // Hardware information
+    uint32_t (*get_flash_size)(SystemInfo* self);
+    uint32_t (*get_minimum_free_heap_size)(SystemInfo* self);
+    uint32_t (*get_free_heap_size)(SystemInfo* self);
+    bool (*get_mac_address)(SystemInfo* self, char* mac_str, size_t size);
+    const char* (*get_chip_model_name)(SystemInfo* self);
+    uint32_t (*get_chip_revision)(SystemInfo* self);
+    uint32_t (*get_cpu_cores)(SystemInfo* self);
+    uint32_t (*get_chip_features)(SystemInfo* self);
+    uint32_t (*get_cpu_freq_hz)(SystemInfo* self);
+    bool (*get_temperature)(SystemInfo* self, float* temperature);
+    uint32_t (*get_psram_size)(SystemInfo* self);
+    uint32_t (*get_free_psram_size)(SystemInfo* self);
+    
+    // Application information
+    const char* (*get_app_name)(SystemInfo* self);
+    const char* (*get_app_version)(SystemInfo* self);
+    const char* (*get_app_compile_date)(SystemInfo* self);
+    const char* (*get_app_compile_time)(SystemInfo* self);
+    const char* (*get_idf_version)(SystemInfo* self);
+    bool (*get_app_elf_sha256)(SystemInfo* self, char* sha256_str, size_t size);
+    
+    // System status
+    uint64_t (*get_uptime_ms)(SystemInfo* self);
+    const char* (*get_reset_reason)(SystemInfo* self);
+    
+    // System control
+    void (*reset)(SystemInfo* self);
+    
+    // Destructor
+    void (*destroy)(SystemInfo* self);
+};
+
+// SystemInfo base class structure
+struct SystemInfo {
+    const SystemInfoVTable* vtable;
+    void* data;   // Implementation-specific data
+};
+
+// SystemInfo constructor and destructor
+SystemInfo* system_info_create(void);
+void system_info_destroy(SystemInfo* self);
+
+// Singleton pattern support
+SystemInfo* system_info_get_instance(void);
+
+// Public methods - these call the vtable functions
 uint32_t system_info_get_flash_size(void);
-
-/**
- * Get minimum free heap size in bytes
- * @return Minimum free heap size in bytes
- */
 uint32_t system_info_get_minimum_free_heap_size(void);
-
-/**
- * Get current free heap size in bytes
- * @return Current free heap size in bytes
- */
 uint32_t system_info_get_free_heap_size(void);
-
-/**
- * Get MAC address as string
- * @param mac_str Buffer to store MAC address string (at least 18 bytes)
- * @param size Size of the buffer
- * @return true on success, false on error
- */
 bool system_info_get_mac_address(char* mac_str, size_t size);
-
-/**
- * Get chip model name
- * @return Chip model name string (static string, do not free)
- */
 const char* system_info_get_chip_model_name(void);
-
-/**
- * Get chip revision
- * @return Chip revision number
- */
 uint32_t system_info_get_chip_revision(void);
-
-/**
- * Get number of CPU cores
- * @return Number of CPU cores
- */
 uint32_t system_info_get_cpu_cores(void);
-
-/**
- * Get chip features bitmask
- * @return Chip features bitmask
- */
 uint32_t system_info_get_chip_features(void);
-
-/**
- * Get application name
- * @return Application name string (static string, do not free)
- */
-const char* system_info_get_app_name(void);
-
-/**
- * Get application version
- * @return Application version string (static string, do not free)
- */
-const char* system_info_get_app_version(void);
-
-/**
- * Get application compile date
- * @return Compile date string (static string, do not free)
- */
-const char* system_info_get_app_compile_date(void);
-
-/**
- * Get application compile time
- * @return Compile time string (static string, do not free)
- */
-const char* system_info_get_app_compile_time(void);
-
-/**
- * Get IDF version (for ESP32) or SDK version
- * @return IDF/SDK version string (static string, do not free)
- */
-const char* system_info_get_idf_version(void);
-
-/**
- * Get application ELF SHA256 hash
- * @param sha256_str Buffer to store SHA256 string (at least 65 bytes)
- * @param size Size of the buffer
- * @return true on success, false on error
- */
-bool system_info_get_app_elf_sha256(char* sha256_str, size_t size);
-
-/**
- * Get system uptime in milliseconds
- * @return System uptime in milliseconds
- */
-uint64_t system_info_get_uptime_ms(void);
-
-/**
- * Get CPU frequency in Hz
- * @return CPU frequency in Hz
- */
 uint32_t system_info_get_cpu_freq_hz(void);
-
-/**
- * Get system temperature in Celsius (if available)
- * @param temperature Pointer to store temperature value
- * @return true if temperature is available, false otherwise
- */
 bool system_info_get_temperature(float* temperature);
-
-/**
- * Get PSRAM size in bytes (if available)
- * @return PSRAM size in bytes, 0 if not available
- */
 uint32_t system_info_get_psram_size(void);
-
-/**
- * Get free PSRAM size in bytes (if available)
- * @return Free PSRAM size in bytes, 0 if not available
- */
 uint32_t system_info_get_free_psram_size(void);
-
-/**
- * Reset system
- */
+const char* system_info_get_app_name(void);
+const char* system_info_get_app_version(void);
+const char* system_info_get_app_compile_date(void);
+const char* system_info_get_app_compile_time(void);
+const char* system_info_get_idf_version(void);
+bool system_info_get_app_elf_sha256(char* sha256_str, size_t size);
+uint64_t system_info_get_uptime_ms(void);
+const char* system_info_get_reset_reason(void);
 void system_info_reset(void);
 
+// =============================================================================
+// 默认实现函数 - 供子类重用
+// =============================================================================
+
 /**
- * Get reset reason
- * @return Reset reason string (static string, do not free)
+ * @brief 默认的应用名称获取实现
  */
-const char* system_info_get_reset_reason(void);
+const char* system_info_default_get_app_name(SystemInfo* self);
+
+/**
+ * @brief 默认的应用版本获取实现
+ */
+const char* system_info_default_get_app_version(SystemInfo* self);
+
+/**
+ * @brief 默认的编译日期获取实现
+ */
+const char* system_info_default_get_app_compile_date(SystemInfo* self);
+
+/**
+ * @brief 默认的编译时间获取实现
+ */
+const char* system_info_default_get_app_compile_time(SystemInfo* self);
+
+// Macro for declaring system_info subclasses
+#define DECLARE_SYSTEM_INFO(system_info_create_func) \
+    SystemInfo* create_system_info(void) { \
+        return system_info_create_func(); \
+    }
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,7 @@
 #include "../board.h"
 #include "../../common/log/linx_log.h"
 #include "../../common/settings.h"
+#include "../../common/system_info.h"
 #include "../../display/display.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +63,13 @@ static const BoardVTable test_board_vtable = {
     .get_system_info_json = NULL,  // Use default implementation
     .destroy = NULL  // Use default implementation
 };
+
+// Default system info creation function for testing
+SystemInfo* create_system_info(void) {
+    // Return NULL to use the default system_info implementation
+    // This allows the system_info module to fall back to its default behavior
+    return NULL;
+}
 
 // Test board creation function
 Board* create_board(void) {

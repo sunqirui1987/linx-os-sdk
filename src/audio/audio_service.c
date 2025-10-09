@@ -620,7 +620,7 @@ int audio_service_initialize(AudioService* service, audio_codec_t* codec) {
         processor_config.enable_ns = service->config.features.noise_suppression;
         
         audio_processor_error_t result = service->audio_processor->vtable->initialize(
-            service->audio_processor, &processor_config, service->codec);
+            service->audio_processor, &processor_config, service->audio_interface);
         if (result != AUDIO_PROCESSOR_SUCCESS) {
             LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to initialize audio processor");
             return -1;

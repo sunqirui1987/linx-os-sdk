@@ -27,7 +27,7 @@ typedef struct {
     void* vad_callback_user_data;
     
     // 音频缓冲区 - 使用vector替代固定数组
-    vector_int16_t buffer;
+    vector_int16_t_t buffer;
 } NoAudioProcessorData;
 
 // 前向声明
@@ -87,7 +87,7 @@ AudioProcessor* no_audio_processor_create(void) {
     }
     
     // 初始化vector缓冲区
-    if (vector_int16_init(&data->buffer) != 0) {
+    if (vector_int16_t_init(&data->buffer) != 0) {
         LINX_LOGE(NO_AUDIO_PROCESSOR_TAG, "初始化vector缓冲区失败");
         free(data);
         free(processor);
@@ -117,7 +117,7 @@ void no_audio_processor_destroy(AudioProcessor* processor) {
         }
         
         // 清理缓冲区
-        vector_int16_destroy(&data->buffer);
+        vector_int16_t_destroy(&data->buffer);
         
         free(data);
     }
@@ -155,7 +155,7 @@ static audio_processor_error_t no_audio_processor_initialize(AudioProcessor* sel
     size_t buffer_size = (config->sample_rate * config->frame_duration_ms) / 1000;
     
     // 调整缓冲区大小
-    if (vector_int16_resize(&data->buffer, buffer_size) != 0) {
+    if (vector_int16_t_resize(&data->buffer, buffer_size) != 0) {
         LINX_LOGE(NO_AUDIO_PROCESSOR_TAG, "调整音频缓冲区大小失败");
         return AUDIO_PROCESSOR_ERROR_MEMORY_ALLOC;
     }
@@ -229,7 +229,7 @@ static audio_processor_error_t no_audio_processor_feed(AudioProcessor* self,
     // 如果输入通道是2，我们需要提取左声道数据
     if (data->config.channels == 2) {
         size_t mono_size = size / 2;
-        size_t buffer_capacity = vector_int16_size(&data->buffer);
+        size_t buffer_capacity = vector_int16_t_size(&data->buffer);
         
         if (mono_size > buffer_capacity) {
             mono_size = buffer_capacity;
@@ -237,10 +237,10 @@ static audio_processor_error_t no_audio_processor_feed(AudioProcessor* self,
         
         // 提取左声道数据
         for (size_t i = 0, j = 0; i < mono_size; ++i, j += 2) {
-            vector_int16_set(&data->buffer, i, data_input[j]);
+            vector_int16_t_set(&data->buffer, i, data_input[j]);
         }
         
-        data->output_callback(vector_int16_data(&data->buffer), mono_size, data->output_callback_user_data);
+        data->output_callback(vector_int16_t_data(&data->buffer), mono_size, data->output_callback_user_data);
     } else {
         data->output_callback(data_input, size, data->output_callback_user_data);
     }
@@ -258,7 +258,7 @@ static size_t no_audio_processor_get_feed_size(const AudioProcessor* self) {
         return 0;
     }
     
-    return vector_int16_size(&data->buffer);
+    return vector_int16_t_size(&data->buffer);
 }
 
 static audio_processor_error_t no_audio_processor_enable_device_aec(AudioProcessor* self, bool enable) {

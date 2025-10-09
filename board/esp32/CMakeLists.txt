@@ -20,6 +20,7 @@ include_directories(
 # Collect source files
 set(ESP32_BOARD_SOURCES
     esp32_board.c
+    esp32_system_info.c
     ../../src/board/board.c
     ../../src/common/settings.c
     ../../src/common/system_info.c

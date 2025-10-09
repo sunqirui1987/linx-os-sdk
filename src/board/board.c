@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <inttypes.h>
 
 #define TAG "Board"
 
@@ -106,14 +107,14 @@ static const char* board_default_get_system_info_json(Board* self) {
         "\"uuid\":\"%s\","
         "\"board_type\":\"%s\","
         "\"chip_model\":\"%s\","
-        "\"chip_revision\":%u,"
-        "\"cpu_cores\":%u,"
-        "\"cpu_freq_hz\":%u,"
-        "\"flash_size\":%u,"
-        "\"free_heap\":%u,"
-        "\"min_free_heap\":%u,"
-        "\"psram_size\":%u,"
-        "\"free_psram\":%u,"
+        "\"chip_revision\":%" PRIu32 ","
+        "\"cpu_cores\":%" PRIu32 ","
+        "\"cpu_freq_hz\":%" PRIu32 ","
+        "\"flash_size\":%" PRIu32 ","
+        "\"free_heap\":%" PRIu32 ","
+        "\"min_free_heap\":%" PRIu32 ","
+        "\"psram_size\":%" PRIu32 ","
+        "\"free_psram\":%" PRIu32 ","
         "\"mac_address\":\"%s\","
         "\"app_name\":\"%s\","
         "\"app_version\":\"%s\","
@@ -238,7 +239,7 @@ static const char* board_default_get_device_status_json(Board* self) {
     snprintf(board_data->cached_device_status_json, 1024,
         "{"
         "\"uptime_ms\":%llu,"
-        "\"free_heap\":%u,"
+        "\"free_heap\":%" PRIu32 ","
         "\"power_save_mode\":%s"
         "%s%.2f"
         "%s%d"
