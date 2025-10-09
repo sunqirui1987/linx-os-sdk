@@ -95,7 +95,9 @@
         "wake_word_interface.h": "c",
         "timestamp_queue.h": "c",
         "signal.h": "c",
-        "audio_processor_speexdsp.h": "c"
+        "audio_processor_speexdsp.h": "c",
+        "sigproc_fix.h": "c",
+        "vector.h": "c"
     },
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/src",

@@ -26,6 +26,7 @@ endif()
 # Core audio module includes
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../
     ${CMAKE_CURRENT_SOURCE_DIR}/../audio
     ${CMAKE_CURRENT_SOURCE_DIR}/../codecs
     ${CMAKE_CURRENT_SOURCE_DIR}/../processor
@@ -70,7 +71,7 @@ set(COMMON_LIB_SOURCES
 if(APPLE)
     list(APPEND AUDIO_LIB_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/audio/portaudio_mac.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/processor/audio_processor_mac.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../board/mac/common/audio/processor/audio_processor_speexdsp.c
     )
     
     # Only include Porcupine implementation if library is found
@@ -105,14 +106,6 @@ target_compile_options(linx_audio_test_lib PRIVATE
     -Wno-unused-function
 )
 
-# AudioService Demo for Mac
-add_executable(audio_service_demo_mac ${TEST_SOURCES})
-
-# Link with the audio library
-target_link_libraries(audio_service_demo_mac 
-    linx_audio_test_lib
-)
-
 # Find required libraries first
 if(APPLE)
     # Try to find and link PortAudio
@@ -122,6 +115,28 @@ if(APPLE)
     else()
         message(WARNING "PortAudio not found. Real audio functionality may not work.")
         message(STATUS "To install PortAudio: brew install portaudio")
+    endif()
+    
+    # Try to find and link SpeexDSP
+    find_path(SPEEXDSP_INCLUDE_DIR
+        NAMES speex/speex_echo.h
+        PATHS /usr/local/include /opt/homebrew/include
+        DOC "SpeexDSP include directory")
+    
+    find_library(SPEEXDSP_LIBRARY
+        NAMES speexdsp
+        PATHS /usr/local/lib /opt/homebrew/lib
+        DOC "SpeexDSP library")
+    
+    if(SPEEXDSP_LIBRARY AND SPEEXDSP_INCLUDE_DIR)
+        message(STATUS "Found SpeexDSP: ${SPEEXDSP_LIBRARY}")
+        message(STATUS "SpeexDSP include: ${SPEEXDSP_INCLUDE_DIR}")
+        # Add SpeexDSP include directory to both library and executable
+        target_include_directories(linx_audio_test_lib PRIVATE ${SPEEXDSP_INCLUDE_DIR})
+        target_include_directories(audio_service_demo_mac PRIVATE ${SPEEXDSP_INCLUDE_DIR})
+    else()
+        message(WARNING "SpeexDSP not found. Audio processing functionality may not work.")
+        message(STATUS "To install SpeexDSP: brew install speexdsp")
     endif()
     
     # Use project's built-in Opus library
@@ -193,6 +208,11 @@ if(APPLE)
     # Link PortAudio if found
     if(PORTAUDIO_LIBRARY)
         target_link_libraries(audio_service_demo_mac ${PORTAUDIO_LIBRARY})
+    endif()
+    
+    # Link SpeexDSP if found
+    if(SPEEXDSP_LIBRARY)
+        target_link_libraries(audio_service_demo_mac ${SPEEXDSP_LIBRARY})
     endif()
     
     # Link built-in Opus library

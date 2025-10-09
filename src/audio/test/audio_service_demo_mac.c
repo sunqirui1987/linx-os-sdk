@@ -32,7 +32,7 @@
 // Mac平台特定组件 (条件编译)
 #ifdef __APPLE__
 #include "../../../board/mac/common/audio/audio/portaudio_mac.h"
-#include "../../../board/mac/common/audio/processor/audio_processor_mac.h"
+#include "../../../board/mac/common/audio/processor/audio_processor_speexdsp.h"
 // 只在有 Porcupine 库时才包含 Porcupine 头文件
 #ifdef HAVE_PORCUPINE
 #include "../../../board/mac/common/audio/wake_words/wake_word_porcupine.h"
@@ -235,7 +235,7 @@ AudioInterface* create_mac_audio_interface() {
  * @brief 创建Mac平台音频处理器
  */
 AudioProcessor* create_mac_audio_processor() {
-    AudioProcessor* processor = audio_processor_mac_create();
+    AudioProcessor* processor = audio_processor_speexdsp_create();
     if (!processor) {
         LINX_LOGE(DEMO_TAG, "创建Mac音频处理器失败");
         return NULL;
@@ -251,7 +251,7 @@ AudioProcessor* create_mac_audio_processor() {
     // 使用虚函数表调用Mac特定的初始化实现
     if (processor->vtable->initialize(processor, &processor_config, NULL) != AUDIO_PROCESSOR_SUCCESS) {
         LINX_LOGE(DEMO_TAG, "初始化Mac音频处理器失败");
-        audio_processor_mac_destroy(processor);
+        audio_processor_speexdsp_destroy(processor);
         return NULL;
     }
     

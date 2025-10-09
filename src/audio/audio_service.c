@@ -10,7 +10,6 @@
 #include "timestamp_queue.h"
 #include "codecs/opus_codec.h"
 #include "../common/log/linx_log.h"
-#include "../third/opus/silk/SigProc_FIX.h"
 #include "../common/std/vector.h"
 
 #include <stdlib.h>
@@ -360,8 +359,8 @@ static void* audio_output_thread_func(void* arg) {
         }
         
         // 启用音频输出（类似C++版本的codec_->EnableOutput(true)）
-        if (service->audio_interface->vtable->init_play) {
-            service->audio_interface->vtable->init_play(service->audio_interface);
+        if (service->audio_interface->vtable->enable_output) {
+            service->audio_interface->vtable->enable_output(service->audio_interface, true);
         }
         
         // 处理播放任务（类似C++版本的codec_->OutputData(task->pcm)）
@@ -424,7 +423,9 @@ static void* audio_output_thread_func(void* arg) {
 }
 
 static void* opus_codec_thread_func(void* arg) {
-    
+    LINX_LOGW(AUDIO_SERVICE_TAG, "Opus codec thread started");
+    // TODO: Implement opus codec thread functionality
+    return NULL;
 }
 
 // ============================================================================
@@ -515,12 +516,37 @@ void audio_service_destroy(AudioService* service) {
 }
 
 int audio_service_initialize(AudioService* service, audio_codec_t* codec) {
-    if (!service || !codec) {
+    if (!service) {
+        LINX_LOGE(AUDIO_SERVICE_TAG, "服务指针为空");
         return -1;
     }
-    
+
+    LINX_LOGI(AUDIO_SERVICE_TAG, "开始初始化音频服务...");
+
+    // 设置编解码器
     service->codec = codec;
-    
+
+    // 初始化音频处理器（如果可用）
+    if (service->audio_processor && service->audio_processor->vtable && service->audio_processor->vtable->initialize) {
+        audio_processor_config_t processor_config = {
+            .sample_rate = service->config.input_format.sample_rate,
+            .channels = service->config.input_format.channels,
+            .frame_duration_ms = service->config.input_format.frame_size_ms,
+            .frame_size = service->config.input_format.sample_rate * service->config.input_format.frame_size_ms / 1000,
+            .enable_aec = service->config.features.device_aec,
+            .enable_ns = service->config.features.noise_suppression,
+            .enable_vad = service->config.features.voice_activity_detection
+        };
+
+        int processor_result = service->audio_processor->vtable->initialize(
+            service->audio_processor, &processor_config, service->audio_interface);
+        if (processor_result != 0) {
+            LINX_LOGE(AUDIO_SERVICE_TAG, "音频处理器初始化失败: %d", processor_result);
+            return processor_result;
+        }
+        LINX_LOGI(AUDIO_SERVICE_TAG, "✅ 音频处理器初始化成功");
+    }
+
     // 启动主编解码器
     if (codec->vtable && codec->vtable->reset) {
         codec_error_t result = codec->vtable->reset(codec);
@@ -672,8 +698,8 @@ int audio_service_start(AudioService* service) {
         }
         
         // 启动录制
-        if (service->audio_interface->vtable->record) {
-            int record_result = service->audio_interface->vtable->record(service->audio_interface);
+        if (service->audio_interface->vtable->enable_input) {
+            int record_result = service->audio_interface->vtable->enable_input(service->audio_interface, true);
             if (record_result == 0) {
                 LINX_LOGI(AUDIO_SERVICE_TAG, "Audio recording started successfully");
             } else {
@@ -682,8 +708,8 @@ int audio_service_start(AudioService* service) {
         }
         
         // 启动播放
-        if (service->audio_interface->vtable->init_play) {
-            int play_result = service->audio_interface->vtable->init_play(service->audio_interface);
+        if (service->audio_interface->vtable->enable_output) {
+            int play_result = service->audio_interface->vtable->enable_output(service->audio_interface, true);
             if (play_result == 0) {
                 LINX_LOGI(AUDIO_SERVICE_TAG, "Audio playback started successfully");
             } else {
@@ -776,8 +802,8 @@ int audio_service_read_audio_data(AudioService* service, vector_int16_t_t *data,
     }
     
     // 启用音频输入（类似C++版本的codec_->EnableInput(true)）
-    if (service->audio_interface->vtable->record) {
-        service->audio_interface->vtable->record(service->audio_interface);
+    if (service->audio_interface->vtable->enable_input) {
+        service->audio_interface->vtable->enable_input(service->audio_interface, true);
     }
     
     // 获取输入采样率和声道数
@@ -1155,68 +1181,45 @@ int audio_service_get_features(const AudioService* service, AudioServiceFeatures
 // ============================================================================
 
 bool audio_service_push_task_to_encode_queue(AudioService* service, AudioTaskType type, int16_t* pcm_data, size_t data_size) {
-    if (!service || !pcm_data || data_size == 0) {
-        LINX_LOGE(AUDIO_SERVICE_TAG, "Push task to encode queue failed: invalid parameters");
+    if (!service) {
+        LINX_LOGE(AUDIO_SERVICE_TAG, "服务指针为空");
         return false;
     }
-    
-    // 创建音频数据副本
-    int16_t* data_copy = (int16_t*)malloc(data_size);
-    if (!data_copy) {
-        LINX_LOGE(AUDIO_SERVICE_TAG, "Push task to encode queue failed: memory allocation failed");
-        return false;
-    }
-    memcpy(data_copy, pcm_data, data_size);
+
+    // 获取当前时间戳
+    uint64_t current_timestamp = timestamp_get_current_time_us();
     
     // 创建音频任务
-    AudioTask* task = audio_task_create(type, data_copy, data_size);
+    AudioTask* task = audio_task_create(type, pcm_data, data_size);
     if (!task) {
-        free(data_copy);
-        LINX_LOGE(AUDIO_SERVICE_TAG, "Push task to encode queue failed: task creation failed");
+        LINX_LOGE(AUDIO_SERVICE_TAG, "创建音频任务失败");
         return false;
     }
-    
+
+    // 推送到编码队列
     pthread_mutex_lock(&service->audio_queue_mutex);
-    
-    // 如果任务类型是发送到发送队列，需要设置时间戳
-    if (type == AUDIO_TASK_PROCESS_AUDIO && !timestamp_queue_is_empty(&service->timestamp_queue)) {
-        if (timestamp_queue_size(&service->timestamp_queue) <= MAX_TIMESTAMPS_IN_QUEUE) {
-            uint32_t timestamp = 0;
-            if (timestamp_queue_pop(&service->timestamp_queue, &timestamp)) {
-                task->timestamp = timestamp;
-            }
-        } else {
-            LINX_LOGW(AUDIO_SERVICE_TAG, "Timestamp queue (%zu) is full, dropping timestamp", 
-                     timestamp_queue_size(&service->timestamp_queue));
-            uint32_t timestamp = 0;
-            timestamp_queue_pop(&service->timestamp_queue, &timestamp);
-            task->timestamp = timestamp;
-        }
-    }
-    
-    // 等待编码队列有空间
-    while (audio_task_queue_size(&service->audio_encode_queue) >= MAX_ENCODE_TASKS_IN_QUEUE && !service->service_stopped) {
-        pthread_cond_wait(&service->audio_queue_cv, &service->audio_queue_mutex);
-    }
-    
-    bool result = false;
-    if (!service->service_stopped) {
-        result = audio_task_queue_push(&service->audio_encode_queue, task);
-        if (result) {
-            pthread_cond_broadcast(&service->audio_queue_cv);
-            LINX_LOGD(AUDIO_SERVICE_TAG, "Task pushed to encode queue successfully, type: %s, queue size: %zu", 
-                     audio_task_type_to_string(type), audio_task_queue_size(&service->audio_encode_queue));
-        } else {
-            LINX_LOGE(AUDIO_SERVICE_TAG, "Failed to push task to encode queue");
-            audio_task_destroy(task);
+    bool success = audio_task_queue_push(&service->audio_encode_queue, task);
+    if (!success) {
+        LINX_LOGW(AUDIO_SERVICE_TAG, "编码队列已满，丢弃任务");
+        audio_task_destroy(task);
+        
+        // 尝试从时间戳队列中弹出对应的时间戳
+        TimestampEntry timestamp_entry;
+        if (timestamp_queue_pop(&service->timestamp_queue, &timestamp_entry)) {
+            LINX_LOGD(AUDIO_SERVICE_TAG, "从时间戳队列中移除时间戳: %llu", timestamp_entry.timestamp);
         }
     } else {
-        LINX_LOGW(AUDIO_SERVICE_TAG, "Service stopped, discarding task");
-        audio_task_destroy(task);
+        LINX_LOGD(AUDIO_SERVICE_TAG, "音频任务已推送到编码队列，时间戳: %llu", current_timestamp);
+        
+        // 如果成功推送任务，也要从时间戳队列中弹出对应的时间戳
+        TimestampEntry timestamp_entry;
+        if (timestamp_queue_pop(&service->timestamp_queue, &timestamp_entry)) {
+            LINX_LOGD(AUDIO_SERVICE_TAG, "处理时间戳队列条目: %llu", timestamp_entry.timestamp);
+        }
     }
-    
     pthread_mutex_unlock(&service->audio_queue_mutex);
-    return result;
+
+    return success;
 }
 
 bool audio_service_push_packet_to_decode_queue(AudioService* service, AudioStreamPacket* packet, bool wait) {
@@ -1337,3 +1340,9 @@ bool audio_service_is_component_ready(const AudioService* service, const char* c
     
     return false;
 }
+
+// Remove unused function warning
+// static uint32_t get_event_bits(AudioService* service) {
+//     if (!service) return 0;
+//     return service->event_bits;
+// }
