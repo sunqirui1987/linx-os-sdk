@@ -148,13 +148,25 @@ int display_interface_get_width(DisplayInterface* self);
 int display_interface_get_height(DisplayInterface* self);
 
 /**
- * Destroy display interface and free resources
+ * Create display interface (stub implementation)
+ * @return Display interface instance or NULL on failure
+ */
+DisplayInterface* display_interface_create(void);
+
+/**
+ * Create display interface with specified dimensions
+ * @param width Display width
+ * @param height Display height
+ * @return Display interface instance or NULL on failure
+ */
+DisplayInterface* display_interface_create_with_size(int width, int height);
+
+/**
+ * Destroy display interface
  * @param self Display interface instance
  * @return 0 on success, negative on error
  */
 int display_interface_destroy(DisplayInterface* self);
-
-
 
 #ifdef __cplusplus
 }

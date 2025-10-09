@@ -1,5 +1,6 @@
 #include "display.h"
-#include "../log/linx_log.h"
+#include "display_stub.h"
+#include "../common/log/linx_log.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -156,6 +157,14 @@ int display_interface_get_height(DisplayInterface* self) {
         return -1;
     }
     return self->height;
+}
+
+DisplayInterface* display_interface_create(void) {
+    return display_stub_create();
+}
+
+DisplayInterface* display_interface_create_with_size(int width, int height) {
+    return display_stub_create_with_size(width, height);
 }
 
 int display_interface_destroy(DisplayInterface* self) {

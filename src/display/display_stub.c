@@ -1,5 +1,5 @@
 #include "display_stub.h"
-#include "../log/linx_log.h"
+#include "../common/log/linx_log.h"
 #include <stdlib.h>
 #include <string.h>
 
