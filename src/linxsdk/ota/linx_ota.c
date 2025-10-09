@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #define OTA_TAG "LINX_OTA"
 
@@ -156,15 +157,15 @@ linx_ota_status_t linx_ota_check_update(linx_ota_info_t *info) {
             "\"ip\":\"%s\","
             "\"mac\":\"%s\""
         "},"
-        "\"flash_size\":%u,"
-        "\"minimum_free_heap_size\":%u,"
+        "\"flash_size\":%" PRIu32 ","
+        "\"minimum_free_heap_size\":%" PRIu32 ","
         "\"mac_address\":\"%s\","
         "\"chip_model_name\":\"%s\","
         "\"chip_info\":{"
-            "\"model\":%u,"
-            "\"cores\":%u,"
-            "\"revision\":%u,"
-            "\"features\":%u"
+            "\"model\":%" PRIu32 ","
+            "\"cores\":%" PRIu32 ","
+            "\"revision\":%" PRIu32 ","
+            "\"features\":%" PRIu32
         "},"
         "\"partition_table\":[{"
             "\"label\":\"\","

@@ -1,9 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/display/lvgl_display/test/build/cmake_install.cmake",
-		"/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/display/lvgl_display/test/build/lvgl/cmake_install.cmake",
-		"/Users/sunqirui/gitlab/aiagent/linx-os-sdk/sdk/display/lvgl_display/test/build/fonts/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

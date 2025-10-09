@@ -3,6 +3,7 @@ set(BOARD_ESP32_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../board/esp32")
 # Collect ESP32 board source files
 file(GLOB BOARD_ESP32_SRCS
     "${BOARD_ESP32_ROOT}/*.c"
+    "${BOARD_ESP32_ROOT}/common/*.c"
 )
 
 # Exclude test files
@@ -12,6 +13,7 @@ idf_component_register(
     SRCS ${BOARD_ESP32_SRCS}
     INCLUDE_DIRS 
         "${BOARD_ESP32_ROOT}"
+        "${BOARD_ESP32_ROOT}/common"
     REQUIRES 
         driver
         esp_wifi

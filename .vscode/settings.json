@@ -97,7 +97,8 @@
         "signal.h": "c",
         "audio_processor_speexdsp.h": "c",
         "sigproc_fix.h": "c",
-        "vector.h": "c"
+        "vector.h": "c",
+        "cjson.h": "c"
     },
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/src",

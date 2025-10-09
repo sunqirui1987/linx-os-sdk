@@ -1,8 +1,0 @@
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/CMakeFiles/codec_test.dir
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/CMakeFiles/run_tests.dir
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/CMakeFiles/test.dir
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/CMakeFiles/edit_cache.dir
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/CMakeFiles/rebuild_cache.dir
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/codecs/CMakeFiles/test.dir
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/codecs/CMakeFiles/edit_cache.dir
-/Users/sunqirui/gitlab/aiagent/linx-mongoose/sdk/codecs/test/build/codecs/CMakeFiles/rebuild_cache.dir

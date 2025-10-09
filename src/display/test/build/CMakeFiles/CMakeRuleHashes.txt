@@ -1,2 +1,0 @@
-# Hashes of file build rules.
-df1a2390ae099f3b5269a2d330bf7221 CMakeFiles/run_lvgl_display_demo
