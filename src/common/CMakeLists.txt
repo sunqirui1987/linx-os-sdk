@@ -32,6 +32,12 @@ set(LINX_COMMON_SOURCES
     
     # STD sources
     ${CMAKE_CURRENT_SOURCE_DIR}/std/vector.c
+    
+    # LED interface sources
+    ${CMAKE_CURRENT_SOURCE_DIR}/led/led.c
+    
+    # Network sources
+    ${CMAKE_CURRENT_SOURCE_DIR}/network.c
 )
 
 # Create static library
@@ -53,6 +59,7 @@ target_include_directories(${LINX_COMMON_TARGET} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/cjson
     ${CMAKE_CURRENT_SOURCE_DIR}/http
     ${CMAKE_CURRENT_SOURCE_DIR}/log
+    ${CMAKE_CURRENT_SOURCE_DIR}/led
     ${CMAKE_CURRENT_SOURCE_DIR}/std
 )
 
@@ -114,6 +121,12 @@ install(FILES
 install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/std/vector.h
     DESTINATION include/linx_common/std
+)
+
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/led.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/network.h
+    DESTINATION include/linx_common
 )
 
 # Print build information
