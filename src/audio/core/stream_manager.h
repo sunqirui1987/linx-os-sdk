@@ -24,16 +24,7 @@ typedef struct linx_stream_manager linx_stream_manager_t;
 typedef struct linx_audio_stream linx_audio_stream_t;
 typedef struct linx_audio_device linx_audio_device_t;
 
-/**
- * @brief 音频流类型
- */
-typedef enum {
-    LINX_AUDIO_STREAM_TYPE_PLAYBACK = 0,    ///< 播放流
-    LINX_AUDIO_STREAM_TYPE_CAPTURE,         ///< 录制流
-    LINX_AUDIO_STREAM_TYPE_DUPLEX,          ///< 双工流
-    LINX_AUDIO_STREAM_TYPE_LOOPBACK,        ///< 回环流
-    LINX_AUDIO_STREAM_TYPE_VIRTUAL          ///< 虚拟流
-} linx_audio_stream_type_t;
+
 
 /**
  * @brief 音频流优先级
@@ -45,43 +36,7 @@ typedef enum {
     LINX_AUDIO_STREAM_PRIORITY_REALTIME     ///< 实时优先级
 } linx_audio_stream_priority_t;
 
-/**
- * @brief 音频流配置
- */
-struct audio_stream_config {
-    // 基本配置
-    char name[64];                     ///< 流名称
-    linx_audio_stream_type_t type;          ///< 流类型
-    linx_audio_stream_priority_t priority;  ///< 流优先级
-    
-    // 音频格式
-    audio_format_info_t format;        ///< 音频格式信息
-    
-    // 缓冲配置
-    uint32_t buffer_size;              ///< 缓冲区大小（帧数）
-    uint32_t buffer_count;             ///< 缓冲区数量
-    uint32_t period_size;              ///< 周期大小（帧数）
-    
-    // 设备配置
-    uint32_t input_device_id;          ///< 输入设备ID
-    uint32_t output_device_id;         ///< 输出设备ID
-    
-    // 功能配置
-    bool enable_volume_control;        ///< 启用音量控制
-    bool enable_format_conversion;     ///< 启用格式转换
-    bool enable_resampling;           ///< 启用重采样
-    bool enable_mixing;               ///< 启用混音
-    
-    // 实时配置
-    bool realtime_processing;         ///< 实时处理
-    uint32_t max_latency_ms;          ///< 最大延迟（毫秒）
-    
-    // 回调函数
-    audio_data_callback_t data_callback;      ///< 数据回调
-    audio_event_callback_t event_callback;    ///< 事件回调
-    audio_error_callback_t error_callback;    ///< 错误回调
-    void* user_data;                          ///< 用户数据
-};
+
 
 /**
  * @brief 音频流统计信息
@@ -121,19 +76,19 @@ struct linx_audio_stream {
     linx_audio_stream_priority_t priority; ///< 流优先级
     
     // 配置和统计
-    audio_stream_config_t config;     ///< 流配置
+    linx_audio_stream_config_t config;     ///< 流配置
     linx_audio_stream_stats_t stats;       ///< 统计信息
     
     // 格式信息
-    audio_format_info_t format;       ///< 当前格式
-    audio_format_info_t native_format; ///< 原生格式
+    linx_audio_format_info_t format;       ///< 当前格式
+    linx_audio_format_info_t native_format; ///< 原生格式
     
     // 设备引用
     linx_audio_device_t* input_device;     ///< 输入设备
     linx_audio_device_t* output_device;    ///< 输出设备
     
     // 缓冲区管理
-    audio_buffer_t** buffers;         ///< 缓冲区数组
+    linx_audio_buffer_t** buffers;         ///< 缓冲区数组
     uint32_t buffer_count;            ///< 缓冲区数量
     uint32_t current_buffer;          ///< 当前缓冲区索引
     
@@ -168,10 +123,10 @@ typedef struct {
     // 混音配置
     bool enable_automatic_mixing;     ///< 启用自动混音
     uint32_t mixer_buffer_size;       ///< 混音器缓冲区大小
-    audio_format_t mixer_format;      ///< 混音器格式
+    linx_audio_format_t mixer_format;      ///< 混音器格式
     
     // 线程配置
-    audio_thread_priority_t thread_priority;  ///< 线程优先级
+    linx_audio_thread_priority_t thread_priority;  ///< 线程优先级
     bool enable_realtime_scheduling;          ///< 启用实时调度
     
     // 调试配置
@@ -261,28 +216,28 @@ void linx_stream_manager_destroy(linx_stream_manager_t* manager);
  * @param manager 流管理器
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_initialize(linx_stream_manager_t* manager);
+linx_audio_result_t linx_stream_manager_initialize(linx_stream_manager_t* manager);
 
 /**
  * @brief 反初始化流管理器
  * @param manager 流管理器
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_deinitialize(linx_stream_manager_t* manager);
+linx_audio_result_t linx_stream_manager_deinitialize(linx_stream_manager_t* manager);
 
 /**
  * @brief 启动流管理器
  * @param manager 流管理器
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_start(linx_stream_manager_t* manager);
+linx_audio_result_t linx_stream_manager_start(linx_stream_manager_t* manager);
 
 /**
  * @brief 停止流管理器
  * @param manager 流管理器
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_stop(linx_stream_manager_t* manager);
+linx_audio_result_t linx_stream_manager_stop(linx_stream_manager_t* manager);
 
 // ============================================================================
 // 流管理接口
@@ -295,8 +250,8 @@ audio_result_t linx_stream_manager_stop(linx_stream_manager_t* manager);
  * @param stream 输出流指针
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_create_stream(linx_stream_manager_t* manager,
-                                           const audio_stream_config_t* config,
+linx_audio_result_t linx_stream_manager_create_stream(linx_stream_manager_t* manager,
+                                           const linx_audio_stream_config_t* config,
                                            linx_audio_stream_t** stream);
 
 /**
@@ -305,7 +260,7 @@ audio_result_t linx_stream_manager_create_stream(linx_stream_manager_t* manager,
  * @param stream 音频流
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_destroy_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_destroy_stream(linx_stream_manager_t* manager,
                                             linx_audio_stream_t* stream);
 
 /**
@@ -314,7 +269,7 @@ audio_result_t linx_stream_manager_destroy_stream(linx_stream_manager_t* manager
  * @param stream 音频流
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_start_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_start_stream(linx_stream_manager_t* manager,
                                           linx_audio_stream_t* stream);
 
 /**
@@ -323,7 +278,7 @@ audio_result_t linx_stream_manager_start_stream(linx_stream_manager_t* manager,
  * @param stream 音频流
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_stop_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_stop_stream(linx_stream_manager_t* manager,
                                          linx_audio_stream_t* stream);
 
 /**
@@ -332,7 +287,7 @@ audio_result_t linx_stream_manager_stop_stream(linx_stream_manager_t* manager,
  * @param stream 音频流
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_pause_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_pause_stream(linx_stream_manager_t* manager,
                                           linx_audio_stream_t* stream);
 
 /**
@@ -341,7 +296,7 @@ audio_result_t linx_stream_manager_pause_stream(linx_stream_manager_t* manager,
  * @param stream 音频流
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_resume_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_resume_stream(linx_stream_manager_t* manager,
                                            linx_audio_stream_t* stream);
 
 // ============================================================================
@@ -355,7 +310,7 @@ audio_result_t linx_stream_manager_resume_stream(linx_stream_manager_t* manager,
  * @param count 输出流数量
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_get_streams(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_get_streams(linx_stream_manager_t* manager,
                                          linx_audio_stream_t*** streams,
                                          uint32_t* count);
 
@@ -387,30 +342,30 @@ linx_audio_stream_t* linx_stream_manager_find_stream_by_name(linx_stream_manager
  * @param config 输出配置
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_get_default_stream_config(linx_audio_stream_type_t type,
-                                                       audio_stream_config_t* config);
+linx_audio_result_t linx_stream_manager_get_default_stream_config(linx_audio_stream_type_t type,
+                                                       linx_audio_stream_config_t* config);
 
 /**
  * @brief 设置流配置
  * @param manager 流管理器
  * @param stream 音频流
- * @param config 新配置
+ * @param config 流配置
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_set_stream_config(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_set_stream_config(linx_stream_manager_t* manager,
                                                linx_audio_stream_t* stream,
-                                               const audio_stream_config_t* config);
+                                               const linx_audio_stream_config_t* config);
 
 /**
  * @brief 获取流配置
  * @param manager 流管理器
  * @param stream 音频流
- * @param config 输出配置
+ * @param config 流配置（输出）
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_get_stream_config(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_get_stream_config(linx_stream_manager_t* manager,
                                                linx_audio_stream_t* stream,
-                                               audio_stream_config_t* config);
+                                               linx_audio_stream_config_t* config);
 
 // ============================================================================
 // 统计接口
@@ -422,7 +377,7 @@ audio_result_t linx_stream_manager_get_stream_config(linx_stream_manager_t* mana
  * @param stats 输出统计信息
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_get_stats(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_get_stats(linx_stream_manager_t* manager,
                                        linx_stream_manager_stats_t* stats);
 
 /**
@@ -430,7 +385,7 @@ audio_result_t linx_stream_manager_get_stats(linx_stream_manager_t* manager,
  * @param manager 流管理器
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_reset_stats(linx_stream_manager_t* manager);
+linx_audio_result_t linx_stream_manager_reset_stats(linx_stream_manager_t* manager);
 
 /**
  * @brief 获取流统计信息
@@ -439,7 +394,7 @@ audio_result_t linx_stream_manager_reset_stats(linx_stream_manager_t* manager);
  * @param stats 输出统计信息
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_get_stream_stats(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_get_stream_stats(linx_stream_manager_t* manager,
                                               linx_audio_stream_t* stream,
                                               linx_audio_stream_stats_t* stats);
 
@@ -449,7 +404,7 @@ audio_result_t linx_stream_manager_get_stream_stats(linx_stream_manager_t* manag
  * @param stream 音频流
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_reset_stream_stats(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_reset_stream_stats(linx_stream_manager_t* manager,
                                                 linx_audio_stream_t* stream);
 
 // =============================================================================
@@ -475,7 +430,7 @@ const char* linx_audio_stream_priority_to_string(linx_audio_stream_priority_t pr
  * @param config 输出配置
  * @return 操作结果
  */
-audio_result_t linx_stream_manager_get_default_config(linx_stream_manager_config_t* config);
+linx_audio_result_t linx_stream_manager_get_default_config(linx_stream_manager_config_t* config);
 
 #ifdef __cplusplus
 }

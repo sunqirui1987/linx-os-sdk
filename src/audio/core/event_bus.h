@@ -66,7 +66,7 @@ struct linx_event_bus {
  * @brief 创建事件总线
  * @return 事件总线实例，失败返回NULL
  */
-linx_event_bus_t* event_bus_create(void);
+linx_event_bus_t* linx_event_bus_create(void);
 
 /**
  * @brief 初始化事件总线
@@ -74,27 +74,27 @@ linx_event_bus_t* event_bus_create(void);
  * @param async_mode 是否启用异步模式
  * @return 错误码
  */
-linx_audio_error_t event_bus_init(linx_event_bus_t* bus, bool async_mode);
+linx_audio_error_t linx_event_bus_init(linx_event_bus_t* bus, bool async_mode);
 
 /**
  * @brief 销毁事件总线
  * @param bus 事件总线实例
  */
-void event_bus_destroy(linx_event_bus_t* bus);
+void linx_event_bus_destroy(linx_event_bus_t* bus);
 
 /**
  * @brief 启动事件总线
  * @param bus 事件总线实例
  * @return 错误码
  */
-linx_audio_error_t event_bus_start(linx_event_bus_t* bus);
+linx_audio_error_t linx_event_bus_start(linx_event_bus_t* bus);
 
 /**
  * @brief 停止事件总线
  * @param bus 事件总线实例
  * @return 错误码
  */
-linx_audio_error_t event_bus_stop(linx_event_bus_t* bus);
+linx_audio_error_t linx_event_bus_stop(linx_event_bus_t* bus);
 
 // ============================================================================
 // 事件订阅管理函数
@@ -108,7 +108,7 @@ linx_audio_error_t event_bus_stop(linx_event_bus_t* bus);
  * @param user_data 用户数据
  * @return 订阅者ID，失败返回0
  */
-uint32_t event_bus_subscribe(linx_event_bus_t* bus,
+uint32_t linx_event_bus_subscribe(linx_event_bus_t* bus,
                             linx_audio_event_type_t event_type,
                             linx_audio_event_callback_t callback,
                             void* user_data);
@@ -119,7 +119,7 @@ uint32_t event_bus_subscribe(linx_event_bus_t* bus,
  * @param subscriber_id 订阅者ID
  * @return 错误码
  */
-linx_audio_error_t event_bus_unsubscribe(linx_event_bus_t* bus, uint32_t subscriber_id);
+linx_audio_error_t linx_event_bus_unsubscribe(linx_event_bus_t* bus, uint32_t subscriber_id);
 
 /**
  * @brief 取消所有订阅

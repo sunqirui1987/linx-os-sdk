@@ -84,7 +84,9 @@ endif()
 
 # 核心源文件
 set(CORE_SOURCES
-    core/types.c
+    core/audio_manager.c
+    core/event_bus.c
+    core/stream_manager.c
 )
 
 # 音频工具源文件
@@ -111,9 +113,9 @@ if(LINX_PLATFORM_ESP32)
     list(APPEND DRIVER_SOURCES drivers/esp32/esp32_driver.c)
 endif()
 
-# 管理器源文件
+# 管理器源文件（已包含在CORE_SOURCES中）
 set(MANAGER_SOURCES
-    manager/audio_manager.c
+    # audio_manager.c 已在 CORE_SOURCES 中
 )
 
 # 管道源文件
@@ -123,11 +125,12 @@ set(PIPELINE_SOURCES
 
 # 内置插件源文件
 set(PLUGIN_SOURCES
+    plugins/plugin_manager.c
     plugins/builtin/builtin_plugins.c
-    plugins/builtin/gain/gain_plugin.c
-    plugins/builtin/equalizer/equalizer_plugin.c
-    plugins/builtin/delay/delay_plugin.c
-    plugins/builtin/reverb/reverb_plugin.c
+    plugins/builtin/gain.c
+    plugins/builtin/equalizer.c
+    plugins/builtin/delay.c
+    plugins/builtin/reverb.c
 )
 
 # 所有源文件
@@ -278,13 +281,13 @@ endif()
 
 # 示例选项
 option(BUILD_EXAMPLES "Build examples" ON)
-if(BUILD_EXAMPLES)
+if(BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
     add_subdirectory(examples)
 endif()
 
 # 测试选项
 option(BUILD_TESTS "Build tests" OFF)
-if(BUILD_TESTS)
+if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
     enable_testing()
     add_subdirectory(tests)
 endif()

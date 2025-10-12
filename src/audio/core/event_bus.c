@@ -33,9 +33,7 @@ static linx_audio_error_t event_bus_dispatch_event(linx_event_bus_t* bus,
 static bool event_bus_should_deliver_event(const event_subscriber_t* subscriber,
                                            const linx_audio_event_t* event);
 static void event_bus_cleanup_subscriber(event_subscriber_t* subscriber);
-static linx_audio_error_t event_bus_validate_params(linx_event_bus_t* bus);
-
-// ============================================================================
+// Implementation============================================================================
 // 事件总线管理函数实现
 // ============================================================================
 
@@ -129,7 +127,7 @@ void event_bus_destroy(linx_event_bus_t* bus)
     
     // 停止事件总线
     if (bus->initialized) {
-        event_bus_stop(bus);
+        linx_event_bus_stop(bus);
         
         // 清理订阅者
         pthread_mutex_lock(&bus->mutex);
@@ -200,7 +198,7 @@ linx_audio_error_t event_bus_start(linx_event_bus_t* bus)
     return LINX_AUDIO_SUCCESS;
 }
 
-linx_audio_error_t event_bus_stop(linx_event_bus_t* bus)
+linx_audio_error_t linx_event_bus_stop(linx_event_bus_t* bus)
 {
     if (!bus || !bus->initialized) {
         LINX_LOGE(TAG, "Event bus not initialized");
@@ -816,17 +814,4 @@ static void event_bus_cleanup_subscriber(event_subscriber_t* subscriber)
         subscriber->callback = NULL;
         subscriber->user_data = NULL;
     }
-}
-
-static linx_audio_error_t event_bus_validate_params(linx_event_bus_t* bus)
-{
-    if (!bus) {
-        return LINX_AUDIO_ERROR_INVALID_PARAM;
-    }
-    
-    if (!bus->initialized) {
-        return LINX_AUDIO_ERROR_NOT_INITIALIZED;
-    }
-    
-    return LINX_AUDIO_SUCCESS;
 }

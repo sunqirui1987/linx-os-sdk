@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: LinxOS Audio System
+Description: @PROJECT_DESCRIPTION@
+Version: @PROJECT_VERSION@
+Requires:
+Libs: -L${libdir} -lLinxAudioSystem
+Cflags: -I${includedir}

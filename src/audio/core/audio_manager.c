@@ -30,7 +30,7 @@ struct linx_audio_manager {
     // 核心组件
     linx_event_bus_t* event_bus;               /**< 事件总线 */
     uint32_t subscriber_id;                    /**< 事件订阅者ID */
-    stream_manager_t* stream_manager;          /**< 流管理器 */
+    linx_stream_manager_t* stream_manager;          /**< 流管理器 */
     linx_plugin_manager_t* plugin_manager;          /**< 插件管理器 */
     
     // 设备管理
@@ -72,7 +72,7 @@ static linx_audio_result_t manager_init_devices(linx_audio_manager_t* manager);
 static void manager_cleanup_devices(linx_audio_manager_t* manager);
 static void manager_update_stats(linx_audio_manager_t* manager);
 static void manager_event_handler(const linx_audio_event_t* event, void* user_data);
-static const char* state_to_string(linx_audio_manager_state_t state);
+
 
 // ============================================================================
 // 默认配置
@@ -263,7 +263,7 @@ linx_audio_result_t linx_audio_manager_init(linx_audio_manager_t* manager)
     
     // 注册事件处理器
     if (manager->event_bus && manager->config.enable_event_bus) {
-        uint32_t subscriber_id = event_bus_subscribe(manager->event_bus, 
+        uint32_t subscriber_id = linx_event_bus_subscribe(manager->event_bus, 
                                                      LINX_AUDIO_EVENT_TYPE_ALL,
                                                      manager_event_handler,
                                                      manager);
@@ -317,7 +317,7 @@ linx_audio_result_t linx_audio_manager_start(linx_audio_manager_t* manager)
     
     // 启动事件总线
     if (manager->event_bus && manager->config.enable_event_bus) {
-        linx_audio_result_t result = event_bus_start(manager->event_bus);
+        linx_audio_result_t result = linx_event_bus_start(manager->event_bus);
         if (result != LINX_AUDIO_SUCCESS) {
             LOG_ERROR("启动事件总线失败: %d", result);
             manager->state = LINX_AUDIO_MANAGER_STATE_ERROR;
@@ -331,7 +331,7 @@ linx_audio_result_t linx_audio_manager_start(linx_audio_manager_t* manager)
     
     // 启动流管理器
     if (manager->stream_manager) {
-        if (stream_manager_start(manager->stream_manager) != LINX_AUDIO_SUCCESS) {
+        if (linx_stream_manager_start(manager->stream_manager) != LINX_AUDIO_SUCCESS) {
             LOG_ERROR("启动流管理器失败");
             pthread_mutex_unlock(&manager->state_mutex);
             return LINX_AUDIO_ERROR_IO_ERROR;
@@ -341,7 +341,7 @@ linx_audio_result_t linx_audio_manager_start(linx_audio_manager_t* manager)
     
     // 启动插件管理器
     if (manager->plugin_manager) {
-        if (plugin_manager_start(manager->plugin_manager) != LINX_AUDIO_SUCCESS) {
+        if (linx_plugin_manager_start(manager->plugin_manager) != LINX_AUDIO_SUCCESS) {
             LOG_ERROR("启动插件管理器失败");
             pthread_mutex_unlock(&manager->state_mutex);
             return LINX_AUDIO_ERROR_IO_ERROR;
@@ -384,7 +384,7 @@ linx_audio_result_t linx_audio_manager_stop(linx_audio_manager_t* manager)
     
     // 停止插件管理器
     if (manager->plugin_manager) {
-        if (plugin_manager_stop(manager->plugin_manager) != LINX_AUDIO_SUCCESS) {
+        if (linx_plugin_manager_stop(manager->plugin_manager) != LINX_AUDIO_SUCCESS) {
             LOG_WARN("停止插件管理器失败");
         } else {
             LOG_DEBUG("插件管理器停止成功");
@@ -393,7 +393,7 @@ linx_audio_result_t linx_audio_manager_stop(linx_audio_manager_t* manager)
     
     // 停止流管理器
     if (manager->stream_manager) {
-        if (stream_manager_stop(manager->stream_manager) != LINX_AUDIO_SUCCESS) {
+        if (linx_stream_manager_stop(manager->stream_manager) != LINX_AUDIO_SUCCESS) {
             LOG_WARN("停止流管理器失败");
         } else {
             LOG_DEBUG("流管理器停止成功");
@@ -405,7 +405,7 @@ linx_audio_result_t linx_audio_manager_stop(linx_audio_manager_t* manager)
     
     // 停止事件总线
     if (manager->event_bus && manager->config.enable_event_bus) {
-        linx_audio_result_t result = event_bus_stop(manager->event_bus);
+        linx_audio_result_t result = linx_event_bus_stop(manager->event_bus);
         if (result != LINX_AUDIO_SUCCESS) {
             LOG_WARN("停止事件总线失败: %d", result);
         }
@@ -537,23 +537,23 @@ static linx_audio_result_t manager_init_components(linx_audio_manager_t* manager
     
     // 创建事件总线
     if (manager->config.enable_event_bus) {
-        manager->event_bus = event_bus_create();
+        manager->event_bus = linx_event_bus_create();
         if (!manager->event_bus) {
             LOG_ERROR("创建事件总线失败");
             return LINX_AUDIO_ERROR_OUT_OF_MEMORY;
         }
         
         // 初始化事件总线
-        linx_audio_result_t result = event_bus_init(manager->event_bus, true);
+        linx_audio_result_t result = linx_event_bus_init(manager->event_bus, true);
         if (result != LINX_AUDIO_SUCCESS) {
             LOG_ERROR("初始化事件总线失败: %d", result);
-            event_bus_destroy(manager->event_bus);
+            linx_event_bus_destroy(manager->event_bus);
             manager->event_bus = NULL;
             return result;
         }
         
         // 注册事件处理器
-        manager->subscriber_id = event_bus_subscribe(manager->event_bus, LINX_AUDIO_EVENT_TYPE_ALL, 
+        manager->subscriber_id = linx_event_bus_subscribe(manager->event_bus, LINX_AUDIO_EVENT_TYPE_ALL, 
                                                    manager_event_handler, manager);
         if (manager->subscriber_id == 0) {
             LOG_WARN("注册事件处理器失败");
@@ -564,44 +564,44 @@ static linx_audio_result_t manager_init_components(linx_audio_manager_t* manager
     LOG_DEBUG("音频处理功能初始化完成");
     
     // 创建流管理器
-    stream_manager_config_t stream_config;
-    stream_manager_get_default_config(&stream_config);
+    linx_stream_manager_config_t stream_config;
+    linx_stream_manager_get_default_config(&stream_config);
     stream_config.max_streams = manager->config.max_streams;
     stream_config.mixer_buffer_size = manager->config.buffer_size;
     
-    manager->stream_manager = stream_manager_create(manager, &stream_config);
+    manager->stream_manager = linx_stream_manager_create(manager, &stream_config);
     if (!manager->stream_manager) {
         LOG_ERROR("创建流管理器失败");
         return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
-    if (stream_manager_initialize(manager->stream_manager) != LINX_AUDIO_SUCCESS) {
+    if (linx_stream_manager_initialize(manager->stream_manager) != LINX_AUDIO_SUCCESS) {
         LOG_ERROR("初始化流管理器失败");
-        stream_manager_destroy(manager->stream_manager);
+        linx_stream_manager_destroy(manager->stream_manager);
         manager->stream_manager = NULL;
         return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
     // 创建插件管理器
-    plugin_manager_config_t plugin_config;
-    plugin_manager_get_default_config(&plugin_config);
+    linx_plugin_manager_config_t plugin_config;
+    linx_plugin_manager_get_default_config(&plugin_config);
     plugin_config.max_plugins = manager->config.max_plugins;
     
-    manager->plugin_manager = plugin_manager_create((struct audio_manager*)manager, &plugin_config);
+    manager->plugin_manager = linx_plugin_manager_create((struct audio_manager*)manager, &plugin_config);
     if (!manager->plugin_manager) {
         LOG_ERROR("创建插件管理器失败");
-        stream_manager_deinitialize(manager->stream_manager);
-        stream_manager_destroy(manager->stream_manager);
+        linx_stream_manager_deinitialize(manager->stream_manager);
+        linx_stream_manager_destroy(manager->stream_manager);
         manager->stream_manager = NULL;
         return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
-    if (plugin_manager_initialize(manager->plugin_manager) != LINX_AUDIO_SUCCESS) {
+    if (linx_plugin_manager_initialize(manager->plugin_manager) != LINX_AUDIO_SUCCESS) {
         LOG_ERROR("初始化插件管理器失败");
-        plugin_manager_destroy(manager->plugin_manager);
+        linx_plugin_manager_destroy(manager->plugin_manager);
         manager->plugin_manager = NULL;
-        stream_manager_deinitialize(manager->stream_manager);
-        stream_manager_destroy(manager->stream_manager);
+        linx_stream_manager_deinitialize(manager->stream_manager);
+        linx_stream_manager_destroy(manager->stream_manager);
         manager->stream_manager = NULL;
         return LINX_AUDIO_ERROR_IO_ERROR;
     }
@@ -622,16 +622,16 @@ static void manager_cleanup_components(linx_audio_manager_t* manager)
     
     // 销毁插件管理器
     if (manager->plugin_manager) {
-        plugin_manager_deinitialize(manager->plugin_manager);
-        plugin_manager_destroy(manager->plugin_manager);
+        linx_plugin_manager_deinitialize(manager->plugin_manager);
+        linx_plugin_manager_destroy(manager->plugin_manager);
         manager->plugin_manager = NULL;
         LOG_DEBUG("插件管理器已销毁");
     }
     
     // 销毁流管理器
     if (manager->stream_manager) {
-        stream_manager_deinitialize(manager->stream_manager);
-        stream_manager_destroy(manager->stream_manager);
+        linx_stream_manager_deinitialize(manager->stream_manager);
+        linx_stream_manager_destroy(manager->stream_manager);
         manager->stream_manager = NULL;
         LOG_DEBUG("流管理器已销毁");
     }
@@ -641,13 +641,13 @@ static void manager_cleanup_components(linx_audio_manager_t* manager)
     
     // 取消事件订阅
     if (manager->event_bus && manager->subscriber_id != 0) {
-        event_bus_unsubscribe(manager->event_bus, manager->subscriber_id);
+        linx_event_bus_unsubscribe(manager->event_bus, manager->subscriber_id);
         manager->subscriber_id = 0;
     }
     
     // 销毁事件总线
     if (manager->event_bus) {
-        event_bus_destroy(manager->event_bus);
+        linx_event_bus_destroy(manager->event_bus);
         manager->event_bus = NULL;
         LOG_DEBUG("事件总线已销毁");
     }
@@ -782,8 +782,8 @@ static void manager_update_stats(linx_audio_manager_t* manager)
     
     // 更新插件统计信息
     if (manager->plugin_manager) {
-        plugin_manager_stats_t plugin_stats;
-        if (plugin_manager_get_stats(manager->plugin_manager, &plugin_stats) == LINX_AUDIO_SUCCESS) {
+        linx_plugin_manager_stats_t plugin_stats;
+        if (linx_plugin_manager_get_stats(manager->plugin_manager, &plugin_stats) == LINX_AUDIO_SUCCESS) {
             manager->stats.loaded_plugins = plugin_stats.loaded_plugins;
         }
     }
@@ -831,31 +831,5 @@ static void manager_event_handler(const linx_audio_event_t* event, void* user_da
         default:
             LOG_DEBUG("未处理的事件类型: %d", event->type);
             break;
-    }
-}
-
-static const char* state_to_string(linx_audio_manager_state_t state)
-{
-    switch (state) {
-        case LINX_AUDIO_MANAGER_STATE_UNINITIALIZED:
-            return "UNINITIALIZED";
-        case LINX_AUDIO_MANAGER_STATE_INITIALIZING:
-            return "INITIALIZING";
-        case LINX_AUDIO_MANAGER_STATE_INITIALIZED:
-            return "INITIALIZED";
-        case LINX_AUDIO_MANAGER_STATE_DEINITIALIZING:
-            return "DEINITIALIZING";
-        case LINX_AUDIO_MANAGER_STATE_STARTING:
-            return "STARTING";
-        case LINX_AUDIO_MANAGER_STATE_RUNNING:
-            return "RUNNING";
-        case LINX_AUDIO_MANAGER_STATE_STOPPING:
-            return "STOPPING";
-        case LINX_AUDIO_MANAGER_STATE_STOPPED:
-            return "STOPPED";
-        case LINX_AUDIO_MANAGER_STATE_ERROR:
-            return "ERROR";
-        default:
-            return "UNKNOWN";
     }
 }

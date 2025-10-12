@@ -30,12 +30,12 @@
 // 内部函数声明
 // ============================================================================
 
-static audio_result_t linx_stream_manager_init_scheduler(linx_stream_manager_t* manager);
+static linx_audio_result_t linx_stream_manager_init_scheduler(linx_stream_manager_t* manager);
 static void linx_stream_manager_cleanup_scheduler(linx_stream_manager_t* manager);
 static void* linx_stream_manager_scheduler_thread(void* arg);
-static audio_result_t linx_stream_manager_schedule_streams(linx_stream_manager_t* manager);
-static audio_result_t linx_stream_manager_process_stream(linx_stream_manager_t* manager, linx_audio_stream_t* stream);
-static audio_result_t linx_stream_manager_validate_config(const audio_stream_config_t* config);
+static linx_audio_result_t linx_stream_manager_schedule_streams(linx_stream_manager_t* manager);
+static linx_audio_result_t linx_stream_manager_process_stream(linx_stream_manager_t* manager, linx_audio_stream_t* stream);
+static linx_audio_result_t linx_stream_manager_validate_config(const linx_audio_stream_config_t* config);
 static uint32_t linx_stream_manager_generate_stream_id(linx_stream_manager_t* manager);
 static void linx_stream_manager_update_stats(linx_stream_manager_t* manager);
 static const char* linx_stream_state_to_string(linx_audio_stream_state_t state);
@@ -157,7 +157,7 @@ void linx_stream_manager_destroy(linx_stream_manager_t* manager)
     LOG_DEBUG("流管理器销毁完成");
 }
 
-audio_result_t linx_stream_manager_initialize(linx_stream_manager_t* manager)
+linx_audio_result_t linx_stream_manager_initialize(linx_stream_manager_t* manager)
 {
     if (!manager) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;
@@ -166,7 +166,7 @@ audio_result_t linx_stream_manager_initialize(linx_stream_manager_t* manager)
     LOG_DEBUG("初始化流管理器");
 
     // 初始化调度器
-    audio_result_t result = linx_stream_manager_init_scheduler(manager);
+    linx_audio_result_t result = linx_stream_manager_init_scheduler(manager);
     if (result != LINX_AUDIO_SUCCESS) {
         LOG_ERROR("初始化调度器失败: %d", result);
         return result;
@@ -176,7 +176,7 @@ audio_result_t linx_stream_manager_initialize(linx_stream_manager_t* manager)
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_deinitialize(linx_stream_manager_t* manager)
+linx_audio_result_t linx_stream_manager_deinitialize(linx_stream_manager_t* manager)
 {
     if (!manager) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;
@@ -198,7 +198,7 @@ audio_result_t linx_stream_manager_deinitialize(linx_stream_manager_t* manager)
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_start(linx_stream_manager_t* manager)
+linx_audio_result_t linx_stream_manager_start(linx_stream_manager_t* manager)
 {
     if (!manager) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;
@@ -219,7 +219,7 @@ audio_result_t linx_stream_manager_start(linx_stream_manager_t* manager)
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_stop(linx_stream_manager_t* manager)
+linx_audio_result_t linx_stream_manager_stop(linx_stream_manager_t* manager)
 {
     if (!manager) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;
@@ -242,8 +242,8 @@ audio_result_t linx_stream_manager_stop(linx_stream_manager_t* manager)
 // 流管理接口实现
 // ============================================================================
 
-audio_result_t linx_stream_manager_create_stream(linx_stream_manager_t* manager,
-                                           const audio_stream_config_t* config,
+linx_audio_result_t linx_stream_manager_create_stream(linx_stream_manager_t* manager,
+                                           const linx_audio_stream_config_t* config,
                                            linx_audio_stream_t** stream)
 {
     if (!manager || !config || !stream) {
@@ -253,7 +253,7 @@ audio_result_t linx_stream_manager_create_stream(linx_stream_manager_t* manager,
     LOG_DEBUG("创建音频流");
 
     // 验证配置
-    audio_result_t result = linx_stream_manager_validate_config(config);
+    linx_audio_result_t result = linx_stream_manager_validate_config(config);
     if (result != LINX_AUDIO_SUCCESS) {
         LOG_ERROR("流配置验证失败: %d", result);
         return result;
@@ -316,7 +316,7 @@ audio_result_t linx_stream_manager_create_stream(linx_stream_manager_t* manager,
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_destroy_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_destroy_stream(linx_stream_manager_t* manager,
                                             linx_audio_stream_t* stream)
 {
     if (!manager || !stream) {
@@ -363,7 +363,7 @@ audio_result_t linx_stream_manager_destroy_stream(linx_stream_manager_t* manager
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_start_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_start_stream(linx_stream_manager_t* manager,
                                           linx_audio_stream_t* stream)
 {
     if (!manager || !stream) {
@@ -391,7 +391,7 @@ audio_result_t linx_stream_manager_start_stream(linx_stream_manager_t* manager,
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_stop_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_stop_stream(linx_stream_manager_t* manager,
                                          linx_audio_stream_t* stream)
 {
     if (!manager || !stream) {
@@ -419,7 +419,7 @@ audio_result_t linx_stream_manager_stop_stream(linx_stream_manager_t* manager,
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_pause_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_pause_stream(linx_stream_manager_t* manager,
                                           linx_audio_stream_t* stream)
 {
     if (!manager || !stream) {
@@ -446,7 +446,7 @@ audio_result_t linx_stream_manager_pause_stream(linx_stream_manager_t* manager,
     return LINX_AUDIO_SUCCESS;
 }
 
-audio_result_t linx_stream_manager_resume_stream(linx_stream_manager_t* manager,
+linx_audio_result_t linx_stream_manager_resume_stream(linx_stream_manager_t* manager,
                                            linx_audio_stream_t* stream)
 {
     if (!manager || !stream) {
@@ -477,7 +477,7 @@ audio_result_t linx_stream_manager_resume_stream(linx_stream_manager_t* manager,
 // 内部函数实现
 // ============================================================================
 
-static audio_result_t linx_stream_manager_init_scheduler(linx_stream_manager_t* manager)
+static linx_audio_result_t linx_stream_manager_init_scheduler(linx_stream_manager_t* manager)
 {
     if (!manager) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;
@@ -536,7 +536,7 @@ static void* linx_stream_manager_scheduler_thread(void* arg)
     return NULL;
 }
 
-static audio_result_t linx_stream_manager_schedule_streams(linx_stream_manager_t* manager)
+static linx_audio_result_t linx_stream_manager_schedule_streams(linx_stream_manager_t* manager)
 {
     if (!manager) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;
@@ -558,7 +558,7 @@ static audio_result_t linx_stream_manager_schedule_streams(linx_stream_manager_t
     return LINX_AUDIO_SUCCESS;
 }
 
-static audio_result_t linx_stream_manager_process_stream(linx_stream_manager_t* manager, 
+static linx_audio_result_t linx_stream_manager_process_stream(linx_stream_manager_t* manager, 
                                                    linx_audio_stream_t* stream)
 {
     if (!manager || !stream) {
@@ -571,7 +571,7 @@ static audio_result_t linx_stream_manager_process_stream(linx_stream_manager_t* 
     return LINX_AUDIO_SUCCESS;
 }
 
-static audio_result_t linx_stream_manager_validate_config(const audio_stream_config_t* config)
+static linx_audio_result_t linx_stream_manager_validate_config(const linx_audio_stream_config_t* config)
 {
     if (!config) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;
@@ -711,7 +711,7 @@ const char* linx_audio_stream_priority_to_string(linx_audio_stream_priority_t pr
     }
 }
 
-audio_result_t linx_stream_manager_get_default_config(linx_stream_manager_config_t* config)
+linx_audio_result_t linx_stream_manager_get_default_config(linx_stream_manager_config_t* config)
 {
     if (!config) {
         return LINX_AUDIO_ERROR_INVALID_PARAMETER;

@@ -60,7 +60,7 @@ typedef struct {
     // 基本信息
     char name[64];                    ///< 插件名称
     char path[256];                   ///< 插件路径
-    linx_plugin_type_t type;          ///< 插件类型
+    linx_audio_plugin_type_t type;          ///< 插件类型
     linx_plugin_status_t status;      ///< 插件状态
     
     // 版本信息
@@ -336,7 +336,7 @@ linx_plugin_info_t* linx_plugin_manager_find_plugin(linx_plugin_manager_t* manag
  * @return 操作结果
  */
 linx_audio_result_t linx_plugin_manager_find_plugins_by_type(linx_plugin_manager_t* manager,
-                                                           linx_plugin_type_t type,
+                                                           linx_audio_plugin_type_t type,
                                                            linx_plugin_info_t*** plugins,
                                                            uint32_t* count);
 
