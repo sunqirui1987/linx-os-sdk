@@ -23,7 +23,6 @@ extern "C" {
 // 前向声明
 typedef struct linx_audio_driver linx_audio_driver_t;
 typedef struct linx_audio_device linx_audio_device_t;
-typedef struct linx_audio_device_info linx_audio_device_info_t;
 
 /**
  * @brief 音频驱动类型
@@ -37,22 +36,6 @@ typedef enum {
 } linx_audio_driver_type_t;
 
 /**
- * @brief 音频设备类型
- */
-typedef enum {
-    LINX_AUDIO_DEVICE_TYPE_UNKNOWN = 0,    ///< 未知设备
-    LINX_AUDIO_DEVICE_TYPE_BUILTIN_SPEAKER, ///< 内置扬声器
-    LINX_AUDIO_DEVICE_TYPE_BUILTIN_MIC,    ///< 内置麦克风
-    LINX_AUDIO_DEVICE_TYPE_HEADPHONES,     ///< 耳机
-    LINX_AUDIO_DEVICE_TYPE_HEADSET,        ///< 耳麦
-    LINX_AUDIO_DEVICE_TYPE_USB_AUDIO,      ///< USB音频设备
-    LINX_AUDIO_DEVICE_TYPE_BLUETOOTH,      ///< 蓝牙音频设备
-    LINX_AUDIO_DEVICE_TYPE_HDMI,           ///< HDMI音频
-    LINX_AUDIO_DEVICE_TYPE_SPDIF,          ///< SPDIF数字音频
-    LINX_AUDIO_DEVICE_TYPE_VIRTUAL         ///< 虚拟设备
-} linx_audio_device_type_t;
-
-/**
  * @brief 音频设备方向
  */
 typedef enum {
@@ -60,18 +43,6 @@ typedef enum {
     LINX_AUDIO_DEVICE_DIRECTION_OUTPUT = 0x02,  ///< 输出设备
     LINX_AUDIO_DEVICE_DIRECTION_DUPLEX = 0x03   ///< 双工设备
 } linx_audio_device_direction_t;
-
-/**
- * @brief 音频设备状态
- */
-typedef enum {
-    LINX_AUDIO_DEVICE_STATE_UNKNOWN = 0,   ///< 未知状态
-    LINX_AUDIO_DEVICE_STATE_UNPLUGGED,     ///< 未插入
-    LINX_AUDIO_DEVICE_STATE_PLUGGED,       ///< 已插入
-    LINX_AUDIO_DEVICE_STATE_ACTIVE,        ///< 活跃
-    LINX_AUDIO_DEVICE_STATE_DISABLED,      ///< 禁用
-    LINX_AUDIO_DEVICE_STATE_ERROR          ///< 错误状态
-} linx_audio_device_state_t;
 
 /**
  * @brief 音频设备能力
@@ -110,40 +81,7 @@ typedef struct {
     bool supports_shared_mode;            ///< 支持共享模式
 } linx_audio_device_capabilities_t;
 
-/**
- * @brief 音频设备信息
- */
-struct linx_audio_device_info {
-    // 基本信息
-    uint32_t id;                          ///< 设备ID
-    char name[128];                       ///< 设备名称
-    char description[256];                ///< 设备描述
-    char manufacturer[64];                ///< 制造商
-    char driver_name[64];                 ///< 驱动名称
-    
-    // 设备属性
-    linx_audio_device_type_t type;             ///< 设备类型
-    linx_audio_device_direction_t direction;   ///< 设备方向
-    linx_audio_device_state_t state;           ///< 设备状态
-    
-    // 硬件信息
-    char hardware_id[128];                ///< 硬件ID
-    char serial_number[64];               ///< 序列号
-    uint32_t vendor_id;                   ///< 厂商ID
-    uint32_t product_id;                  ///< 产品ID
-    
-    // 能力信息
-    linx_audio_device_capabilities_t capabilities; ///< 设备能力
-    
-    // 默认格式
-    linx_audio_format_info_t default_format;   ///< 默认格式
-    
-    // 标志
-    bool is_default;                      ///< 是否为默认设备
-    bool is_system;                       ///< 是否为系统设备
-    bool is_removable;                    ///< 是否可移除
-    bool is_wireless;                     ///< 是否为无线设备
-};
+
 
 /**
  * @brief 音频设备配置
@@ -313,11 +251,33 @@ typedef struct {
  * @brief 音频驱动配置
  */
 typedef struct {
+    // 驱动类型
+    linx_audio_driver_type_t type;        ///< 驱动类型
+    
+    // 设备配置
+    uint32_t input_device_id;             ///< 输入设备ID
+    uint32_t output_device_id;            ///< 输出设备ID
+    
+    // 音频格式配置
+    linx_audio_format_info_t format;      ///< 音频格式
+    
+    // 缓冲区配置
+    uint32_t buffer_size;                 ///< 缓冲区大小
+    uint32_t buffer_count;                ///< 缓冲区数量
+    
+    // 线程配置
+    linx_audio_thread_priority_t thread_priority; ///< 线程优先级
+    
+    // 模式配置
+    bool use_exclusive_mode;              ///< 使用独占模式
+    bool enable_input;                    ///< 启用输入
+    bool enable_output;                   ///< 启用输出
+    
     // 基本配置
     char name[64];                        ///< 驱动名称
     char version[32];                     ///< 驱动版本
     
-    // 性能配置
+    // 设备管理配置
     uint32_t max_devices;                 ///< 最大设备数量
     uint32_t polling_interval_ms;         ///< 轮询间隔（毫秒）
     bool enable_hot_plug;                 ///< 启用热插拔
@@ -338,6 +298,7 @@ typedef struct {
     
     // 性能统计
     uint64_t total_data_transferred;      ///< 总传输数据量
+    uint32_t callback_count;              ///< 回调次数
     uint32_t average_latency_us;          ///< 平均延迟（微秒）
     uint32_t peak_latency_us;             ///< 峰值延迟（微秒）
     
@@ -353,6 +314,7 @@ typedef struct {
 struct linx_audio_driver {
     // 基本信息
     uint32_t id;                          ///< 驱动ID
+    linx_audio_driver_type_t type;        ///< 驱动类型
     char name[64];                        ///< 驱动名称
     char version[32];                     ///< 驱动版本
     

@@ -79,135 +79,71 @@ if(LINX_PLATFORM_LINUX)
 endif()
 
 # ============================================================================
-# 源文件列表
+# 源文件收集
 # ============================================================================
 
-# 核心源文件
-set(CORE_SOURCES
-    core/audio_manager.c
-    core/event_bus.c
-    core/stream_manager.c
+# 递归获取所有.c源文件
+file(GLOB_RECURSE ALL_SOURCES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
 )
 
-# 音频工具源文件
-set(UTILS_SOURCES
-    utils/audio_utils.c
-)
+# 排除test开头的目录
+list(FILTER ALL_SOURCES EXCLUDE REGEX ".*/test[^/]*/.+")
 
-# 驱动源文件
-set(DRIVER_SOURCES
-    drivers/driver_factory.c
-    drivers/dummy_driver.c
-)
+# 排除build开头的目录
+list(FILTER ALL_SOURCES EXCLUDE REGEX ".*/build[^/]*/.+")
 
-# 平台特定驱动
-if(LINX_PLATFORM_MACOS AND COREAUDIO_FRAMEWORK AND AUDIOTOOLBOX_FRAMEWORK)
-    list(APPEND DRIVER_SOURCES drivers/coreaudio/coreaudio_driver.c)
-endif()
+# 排除examples目录（如果存在）
+list(FILTER ALL_SOURCES EXCLUDE REGEX ".*/examples/.+")
 
-if(LINX_PLATFORM_LINUX AND ALSA_FOUND)
-    list(APPEND DRIVER_SOURCES drivers/alsa/alsa_driver.c)
-endif()
+# 打印找到的源文件
+message(STATUS "Found source files:")
+foreach(source ${ALL_SOURCES})
+    file(RELATIVE_PATH rel_source ${CMAKE_CURRENT_SOURCE_DIR} ${source})
+    message(STATUS "  ${rel_source}")
+endforeach()
 
-if(LINX_PLATFORM_ESP32)
-    list(APPEND DRIVER_SOURCES drivers/esp32/esp32_driver.c)
-endif()
-
-# 管理器源文件（已包含在CORE_SOURCES中）
-set(MANAGER_SOURCES
-    # audio_manager.c 已在 CORE_SOURCES 中
-)
-
-# 管道源文件
-set(PIPELINE_SOURCES
-    pipeline/audio_pipeline.c
-)
-
-# 内置插件源文件
-set(PLUGIN_SOURCES
-    plugins/plugin_manager.c
-    plugins/builtin/builtin_plugins.c
-    plugins/builtin/gain.c
-    plugins/builtin/equalizer.c
-    plugins/builtin/delay.c
-    plugins/builtin/reverb.c
-)
-
-# 所有源文件
-set(ALL_SOURCES
-    ${CORE_SOURCES}
-    ${UTILS_SOURCES}
-    ${DRIVER_SOURCES}
-    ${MANAGER_SOURCES}
-    ${PIPELINE_SOURCES}
-    ${PLUGIN_SOURCES}
-)
-
-# 头文件列表
-set(PUBLIC_HEADERS
-    core/types.h
-    drivers/audio_driver.h
-    manager/audio_manager.h
-    pipeline/audio_pipeline.h
-    plugins/builtin/builtin_plugins.h
-    utils/audio_utils.h
-)
 
 # ============================================================================
 # 库目标
 # ============================================================================
 
-# 静态库
-add_library(LinxAudioSystem_static STATIC ${ALL_SOURCES})
-set_target_properties(LinxAudioSystem_static PROPERTIES
-    OUTPUT_NAME LinxAudioSystem
-    VERSION ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR}
-)
-
-# 共享库（可选）
+# 构建选项
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
-if(BUILD_SHARED_LIBS)
+option(LINX_AUDIO_BUILD_STATIC "Build static library" ON)
+option(LINX_AUDIO_BUILD_SHARED "Build shared library" ${BUILD_SHARED_LIBS})
+
+# 静态库
+if(LINX_AUDIO_BUILD_STATIC)
+    add_library(LinxAudioSystem_static STATIC ${ALL_SOURCES})
+    set_target_properties(LinxAudioSystem_static PROPERTIES
+        OUTPUT_NAME LinxAudioSystem
+        VERSION ${PROJECT_VERSION}
+        SOVERSION ${PROJECT_VERSION_MAJOR}
+    )
+    
+    # 链接库
+    target_link_libraries(LinxAudioSystem_static 
+        Threads::Threads
+    )
+    
+    if(MATH_LIBRARY)
+        target_link_libraries(LinxAudioSystem_static ${MATH_LIBRARY})
+    endif()
+    
+    message(STATUS "Building static library: libLinxAudioSystem.a")
+endif()
+
+# 共享库
+if(LINX_AUDIO_BUILD_SHARED)
     add_library(LinxAudioSystem_shared SHARED ${ALL_SOURCES})
     set_target_properties(LinxAudioSystem_shared PROPERTIES
         OUTPUT_NAME LinxAudioSystem
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
     )
-endif()
-
-# ============================================================================
-# 链接库
-# ============================================================================
-
-# 静态库链接
-target_link_libraries(LinxAudioSystem_static 
-    Threads::Threads
-)
-
-if(MATH_LIBRARY)
-    target_link_libraries(LinxAudioSystem_static ${MATH_LIBRARY})
-endif()
-
-# 平台特定链接
-if(LINX_PLATFORM_MACOS)
-    if(COREAUDIO_FRAMEWORK AND AUDIOTOOLBOX_FRAMEWORK)
-        target_link_libraries(LinxAudioSystem_static 
-            ${COREAUDIO_FRAMEWORK}
-            ${AUDIOTOOLBOX_FRAMEWORK}
-        )
-    endif()
-endif()
-
-if(LINX_PLATFORM_LINUX)
-    if(ALSA_FOUND)
-        target_link_libraries(LinxAudioSystem_static ${ALSA_LIBRARIES})
-        target_include_directories(LinxAudioSystem_static PRIVATE ${ALSA_INCLUDE_DIRS})
-    endif()
-endif()
-
-# 共享库链接
-if(BUILD_SHARED_LIBS)
+    
+    # 链接库
     target_link_libraries(LinxAudioSystem_shared 
         Threads::Threads
     )
@@ -216,17 +152,37 @@ if(BUILD_SHARED_LIBS)
         target_link_libraries(LinxAudioSystem_shared ${MATH_LIBRARY})
     endif()
     
-    if(LINX_PLATFORM_MACOS)
-        if(COREAUDIO_FRAMEWORK AND AUDIOTOOLBOX_FRAMEWORK)
+    message(STATUS "Building shared library: libLinxAudioSystem.so")
+endif()
+
+# ============================================================================
+# 平台特定链接
+# ============================================================================
+
+if(LINX_PLATFORM_MACOS)
+    if(COREAUDIO_FRAMEWORK AND AUDIOTOOLBOX_FRAMEWORK)
+        if(LINX_AUDIO_BUILD_STATIC)
+            target_link_libraries(LinxAudioSystem_static 
+                ${COREAUDIO_FRAMEWORK}
+                ${AUDIOTOOLBOX_FRAMEWORK}
+            )
+        endif()
+        if(LINX_AUDIO_BUILD_SHARED)
             target_link_libraries(LinxAudioSystem_shared 
                 ${COREAUDIO_FRAMEWORK}
                 ${AUDIOTOOLBOX_FRAMEWORK}
             )
         endif()
     endif()
-    
-    if(LINX_PLATFORM_LINUX)
-        if(ALSA_FOUND)
+endif()
+
+if(LINX_PLATFORM_LINUX)
+    if(ALSA_FOUND)
+        if(LINX_AUDIO_BUILD_STATIC)
+            target_link_libraries(LinxAudioSystem_static ${ALSA_LIBRARIES})
+            target_include_directories(LinxAudioSystem_static PRIVATE ${ALSA_INCLUDE_DIRS})
+        endif()
+        if(LINX_AUDIO_BUILD_SHARED)
             target_link_libraries(LinxAudioSystem_shared ${ALSA_LIBRARIES})
             target_include_directories(LinxAudioSystem_shared PRIVATE ${ALSA_INCLUDE_DIRS})
         endif()
@@ -239,11 +195,13 @@ endif()
 
 # 平台特定定义
 if(LINX_PLATFORM_MACOS)
-    target_compile_definitions(LinxAudioSystem_static PRIVATE
-        LINX_PLATFORM_MACOS=1
-        _DARWIN_C_SOURCE
-    )
-    if(BUILD_SHARED_LIBS)
+    if(LINX_AUDIO_BUILD_STATIC)
+        target_compile_definitions(LinxAudioSystem_static PRIVATE
+            LINX_PLATFORM_MACOS=1
+            _DARWIN_C_SOURCE
+        )
+    endif()
+    if(LINX_AUDIO_BUILD_SHARED)
         target_compile_definitions(LinxAudioSystem_shared PRIVATE
             LINX_PLATFORM_MACOS=1
             _DARWIN_C_SOURCE
@@ -252,11 +210,13 @@ if(LINX_PLATFORM_MACOS)
 endif()
 
 if(LINX_PLATFORM_LINUX)
-    target_compile_definitions(LinxAudioSystem_static PRIVATE
-        LINX_PLATFORM_LINUX=1
-        _GNU_SOURCE
-    )
-    if(BUILD_SHARED_LIBS)
+    if(LINX_AUDIO_BUILD_STATIC)
+        target_compile_definitions(LinxAudioSystem_static PRIVATE
+            LINX_PLATFORM_LINUX=1
+            _GNU_SOURCE
+        )
+    endif()
+    if(LINX_AUDIO_BUILD_SHARED)
         target_compile_definitions(LinxAudioSystem_shared PRIVATE
             LINX_PLATFORM_LINUX=1
             _GNU_SOURCE
@@ -265,10 +225,12 @@ if(LINX_PLATFORM_LINUX)
 endif()
 
 if(LINX_PLATFORM_ESP32)
-    target_compile_definitions(LinxAudioSystem_static PRIVATE
-        LINX_PLATFORM_ESP32=1
-    )
-    if(BUILD_SHARED_LIBS)
+    if(LINX_AUDIO_BUILD_STATIC)
+        target_compile_definitions(LinxAudioSystem_static PRIVATE
+            LINX_PLATFORM_ESP32=1
+        )
+    endif()
+    if(LINX_AUDIO_BUILD_SHARED)
         target_compile_definitions(LinxAudioSystem_shared PRIVATE
             LINX_PLATFORM_ESP32=1
         )
@@ -297,13 +259,15 @@ endif()
 # ============================================================================
 
 # 安装库文件
-install(TARGETS LinxAudioSystem_static
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
+if(LINX_AUDIO_BUILD_STATIC)
+    install(TARGETS LinxAudioSystem_static
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
 
-if(BUILD_SHARED_LIBS)
+if(LINX_AUDIO_BUILD_SHARED)
     install(TARGETS LinxAudioSystem_shared
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
@@ -312,8 +276,20 @@ if(BUILD_SHARED_LIBS)
 endif()
 
 # 安装头文件
-install(FILES ${PUBLIC_HEADERS}
-    DESTINATION include/linx/audio
+install(DIRECTORY core/ DESTINATION include/linx_audio/core
+    FILES_MATCHING PATTERN "*.h"
+)
+install(DIRECTORY utils/ DESTINATION include/linx_audio/utils
+    FILES_MATCHING PATTERN "*.h"
+)
+install(DIRECTORY drivers/ DESTINATION include/linx_audio/drivers
+    FILES_MATCHING PATTERN "*.h"
+)
+install(DIRECTORY plugins/ DESTINATION include/linx_audio/plugins
+    FILES_MATCHING PATTERN "*.h"
+)
+install(DIRECTORY pipeline/ DESTINATION include/linx_audio/pipeline
+    FILES_MATCHING PATTERN "*.h"
 )
 
 # 安装pkg-config文件
@@ -330,12 +306,14 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/linx-audio.pc
 # 信息输出
 # ============================================================================
 
+message(STATUS "")
 message(STATUS "LinxOS Audio System Configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "  C Compiler: ${CMAKE_C_COMPILER_ID}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Build Shared: ${BUILD_SHARED_LIBS}")
+message(STATUS "  Build Static: ${LINX_AUDIO_BUILD_STATIC}")
+message(STATUS "  Build Shared: ${LINX_AUDIO_BUILD_SHARED}")
 message(STATUS "  Build Examples: ${BUILD_EXAMPLES}")
 message(STATUS "  Build Tests: ${BUILD_TESTS}")
 
@@ -361,151 +339,4 @@ endif()
 if(LINX_PLATFORM_ESP32)
     message(STATUS "           esp32")
 endif()
-
-# 编译器设置
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -fPIC")
-    set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DDEBUG")
-    set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
-endif()
-
-# 平台检测
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    add_definitions(-DLINX_AUDIO_PLATFORM_LINUX=1 -D_GNU_SOURCE)
-    message(STATUS "Platform: Linux")
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    add_definitions(-DLINX_AUDIO_PLATFORM_MACOS=1)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14")
-    message(STATUS "Platform: macOS")
-elseif(ESP_PLATFORM)
-    add_definitions(-DLINX_AUDIO_PLATFORM_ESP32=1 -DLINX_AUDIO_EMBEDDED=1)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os")
-    message(STATUS "Platform: ESP32")
-endif()
-
-# 查找系统库
-find_package(Threads REQUIRED)
-set(LINX_AUDIO_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
-
-# 查找数学库
-if(NOT ESP_PLATFORM)
-    find_library(MATH_LIBRARY m)
-    if(MATH_LIBRARY)
-        list(APPEND LINX_AUDIO_LIBRARIES ${MATH_LIBRARY})
-    endif()
-endif()
-
-# 平台特定库
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    # 查找ALSA
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(ALSA alsa)
-        if(ALSA_FOUND)
-            add_definitions(-DLINX_AUDIO_HAVE_ALSA=1)
-            list(APPEND LINX_AUDIO_LIBRARIES ${ALSA_LIBRARIES})
-            include_directories(${ALSA_INCLUDE_DIRS})
-            message(STATUS "ALSA: Found")
-        endif()
-    endif()
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    # 查找CoreAudio框架
-    find_library(COREAUDIO_FRAMEWORK CoreAudio)
-    find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
-    if(COREAUDIO_FRAMEWORK AND AUDIOTOOLBOX_FRAMEWORK)
-        add_definitions(-DLINX_AUDIO_HAVE_COREAUDIO=1)
-        list(APPEND LINX_AUDIO_LIBRARIES ${COREAUDIO_FRAMEWORK} ${AUDIOTOOLBOX_FRAMEWORK})
-        message(STATUS "CoreAudio: Found")
-    endif()
-endif()
-
-# 自动收集所有.c源文件
-file(GLOB_RECURSE LINX_AUDIO_SOURCES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
-)
-
-# 排除示例和测试文件
-list(FILTER LINX_AUDIO_SOURCES EXCLUDE REGEX ".*/examples/.*")
-list(FILTER LINX_AUDIO_SOURCES EXCLUDE REGEX ".*/tests/.*")
-
-# 打印找到的源文件
-message(STATUS "Found source files:")
-foreach(source ${LINX_AUDIO_SOURCES})
-    file(RELATIVE_PATH rel_source ${CMAKE_CURRENT_SOURCE_DIR} ${source})
-    message(STATUS "  ${rel_source}")
-endforeach()
-
-# 创建静态库
-if(LINX_AUDIO_BUILD_STATIC)
-    add_library(linx_audio STATIC ${LINX_AUDIO_SOURCES})
-    target_link_libraries(linx_audio ${LINX_AUDIO_LIBRARIES})
-    
-    # 设置库属性
-    set_target_properties(linx_audio PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        SOVERSION ${PROJECT_VERSION_MAJOR}
-        OUTPUT_NAME linx_audio
-    )
-    
-    message(STATUS "Building static library: liblinx_audio.a")
-endif()
-
-# 创建共享库
-if(LINX_AUDIO_BUILD_SHARED)
-    add_library(linx_audio_shared SHARED ${LINX_AUDIO_SOURCES})
-    target_link_libraries(linx_audio_shared ${LINX_AUDIO_LIBRARIES})
-    
-    # 设置库属性
-    set_target_properties(linx_audio_shared PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        SOVERSION ${PROJECT_VERSION_MAJOR}
-        OUTPUT_NAME linx_audio
-    )
-    
-    message(STATUS "Building shared library: liblinx_audio.so")
-endif()
-
-# 安装库文件
-if(LINX_AUDIO_BUILD_STATIC)
-    install(TARGETS linx_audio
-        ARCHIVE DESTINATION lib
-        LIBRARY DESTINATION lib
-    )
-endif()
-
-if(LINX_AUDIO_BUILD_SHARED)
-    install(TARGETS linx_audio_shared
-        ARCHIVE DESTINATION lib
-        LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin
-    )
-endif()
-
-# 安装头文件
-install(DIRECTORY core/ DESTINATION include/linx_audio/core
-    FILES_MATCHING PATTERN "*.h"
-)
-install(DIRECTORY utils/ DESTINATION include/linx_audio/utils
-    FILES_MATCHING PATTERN "*.h"
-)
-install(DIRECTORY drivers/ DESTINATION include/linx_audio/drivers
-    FILES_MATCHING PATTERN "*.h"
-)
-install(DIRECTORY plugins/ DESTINATION include/linx_audio/plugins
-    FILES_MATCHING PATTERN "*.h"
-)
-install(DIRECTORY pipeline/ DESTINATION include/linx_audio/pipeline
-    FILES_MATCHING PATTERN "*.h"
-)
-
-# 打印配置信息
-message(STATUS "")
-message(STATUS "LinxOS Audio System Configuration:")
-message(STATUS "  Version: ${PROJECT_VERSION}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "  C Compiler: ${CMAKE_C_COMPILER_ID}")
-message(STATUS "  Build static library: ${LINX_AUDIO_BUILD_STATIC}")
-message(STATUS "  Build shared library: ${LINX_AUDIO_BUILD_SHARED}")
-message(STATUS "  Linked libraries: ${LINX_AUDIO_LIBRARIES}")
 message(STATUS "")

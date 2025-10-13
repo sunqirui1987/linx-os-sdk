@@ -75,6 +75,12 @@ typedef enum {
     LINX_AUDIO_ERROR_STREAM_ERROR = -14,    /**< 流错误 */
     LINX_AUDIO_ERROR_NOT_FOUND = -15,       /**< 未找到 */
     LINX_AUDIO_ERROR_INVALID_STATE = -16,   /**< 无效状态 */
+    LINX_AUDIO_ERROR_MUTEX_INIT = -17,      /**< 互斥锁初始化失败 */
+    LINX_AUDIO_ERROR_CONDITION_INIT = -18,  /**< 条件变量初始化失败 */
+    LINX_AUDIO_ERROR_THREAD_CREATE = -19,   /**< 线程创建失败 */
+    LINX_AUDIO_ERROR_RESOURCE_LIMIT = -20,  /**< 资源限制 */
+    LINX_AUDIO_ERROR_NOT_SUPPORTED = -21,   /**< 不支持的操作 */
+    LINX_AUDIO_ERROR_THREAD_ERROR = -22,    /**< 线程错误 */
     LINX_AUDIO_ERROR_UNKNOWN = -99          /**< 未知错误 */
 } linx_audio_error_t;
 
@@ -106,6 +112,13 @@ typedef enum {
     LINX_AUDIO_FORMAT_F64BE             /**< 64位浮点数，大端 */
 } linx_audio_format_t;
 
+// 常用格式别名
+#define LINX_AUDIO_FORMAT_INT16     LINX_AUDIO_FORMAT_S16LE
+#define LINX_AUDIO_FORMAT_INT24     LINX_AUDIO_FORMAT_S24LE
+#define LINX_AUDIO_FORMAT_INT32     LINX_AUDIO_FORMAT_S32LE
+#define LINX_AUDIO_FORMAT_FLOAT32   LINX_AUDIO_FORMAT_F32LE
+#define LINX_AUDIO_FORMAT_FLOAT64   LINX_AUDIO_FORMAT_F64LE
+
 /**
  * @brief 音频参数结构体
  */
@@ -132,6 +145,10 @@ typedef enum {
     LINX_AUDIO_DEVICE_TYPE_DUPLEX       /**< 全双工设备 */
 } linx_audio_device_type_t;
 
+// 设备类型别名，用于兼容性
+#define LINX_AUDIO_DEVICE_TYPE_OUTPUT   LINX_AUDIO_DEVICE_TYPE_PLAYBACK
+#define LINX_AUDIO_DEVICE_TYPE_INPUT    LINX_AUDIO_DEVICE_TYPE_CAPTURE
+
 /**
  * @brief 音频设备状态
  */
@@ -152,6 +169,9 @@ typedef struct {
     linx_audio_device_type_t type;      /**< 设备类型 */
     linx_audio_device_state_t state;    /**< 设备状态 */
     linx_audio_params_t default_params; /**< 默认音频参数 */
+    linx_audio_format_t format;         /**< 支持的音频格式 */
+    uint32_t min_sample_rate;           /**< 最小采样率 */
+    uint32_t max_sample_rate;           /**< 最大采样率 */
     bool is_default;                    /**< 是否为默认设备 */
     void* driver_data;                  /**< 驱动私有数据 */
 } linx_audio_device_info_t;
@@ -167,7 +187,9 @@ typedef enum {
     LINX_AUDIO_STREAM_TYPE_UNKNOWN = 0, /**< 未知流 */
     LINX_AUDIO_STREAM_TYPE_PLAYBACK,    /**< 播放流 */
     LINX_AUDIO_STREAM_TYPE_CAPTURE,     /**< 录音流 */
-    LINX_AUDIO_STREAM_TYPE_DUPLEX       /**< 全双工流 */
+    LINX_AUDIO_STREAM_TYPE_DUPLEX,      /**< 全双工流 */
+    LINX_AUDIO_STREAM_TYPE_LOOPBACK,    /**< 回环流 */
+    LINX_AUDIO_STREAM_TYPE_VIRTUAL      /**< 虚拟流 */
 } linx_audio_stream_type_t;
 
 /**
@@ -176,6 +198,7 @@ typedef enum {
 typedef enum {
     LINX_AUDIO_STREAM_STATE_UNKNOWN = 0, /**< 未知状态 */
     LINX_AUDIO_STREAM_STATE_CREATED,     /**< 已创建 */
+    LINX_AUDIO_STREAM_STATE_INITIALIZED, /**< 已初始化 */
     LINX_AUDIO_STREAM_STATE_PREPARED,    /**< 已准备 */
     LINX_AUDIO_STREAM_STATE_RUNNING,     /**< 运行中 */
     LINX_AUDIO_STREAM_STATE_PAUSED,      /**< 暂停 */
@@ -183,7 +206,15 @@ typedef enum {
     LINX_AUDIO_STREAM_STATE_ERROR        /**< 错误状态 */
 } linx_audio_stream_state_t;
 
-
+/**
+ * @brief 音频流优先级
+ */
+typedef enum {
+    LINX_AUDIO_STREAM_PRIORITY_LOW = 0,     /**< 低优先级 */
+    LINX_AUDIO_STREAM_PRIORITY_NORMAL,      /**< 普通优先级 */
+    LINX_AUDIO_STREAM_PRIORITY_HIGH,        /**< 高优先级 */
+    LINX_AUDIO_STREAM_PRIORITY_REALTIME     /**< 实时优先级 */
+} linx_audio_stream_priority_t;
 
 // ============================================================================
 // 事件系统定义
@@ -300,17 +331,6 @@ typedef enum {
 // ============================================================================
 
 /**
- * @brief 音频格式信息结构体
- */
-typedef struct {
-    linx_audio_format_t format;         /**< 采样格式 */
-    uint32_t sample_rate;               /**< 采样率 */
-    uint16_t channels;                  /**< 通道数 */
-    uint16_t bits_per_sample;           /**< 每样本位数 */
-    uint32_t frame_size;                /**< 帧大小（字节） */
-} linx_audio_format_info_t;
-
-/**
  * @brief 通道布局类型
  */
 typedef enum {
@@ -321,6 +341,18 @@ typedef enum {
     LINX_AUDIO_CHANNEL_LAYOUT_5_1,           /**< 5.1声道 */
     LINX_AUDIO_CHANNEL_LAYOUT_7_1            /**< 7.1声道 */
 } linx_audio_channel_layout_t;
+
+/**
+ * @brief 音频格式信息结构体
+ */
+typedef struct {
+    linx_audio_format_t format;         /**< 采样格式 */
+    uint32_t sample_rate;               /**< 采样率 */
+    uint16_t channels;                  /**< 通道数 */
+    uint16_t bits_per_sample;           /**< 每样本位数 */
+    uint32_t frame_size;                /**< 帧大小（字节） */
+    linx_audio_channel_layout_t channel_layout; /**< 通道布局 */
+} linx_audio_format_info_t;
 
 /**
  * @brief 音频流配置结构体
@@ -334,6 +366,7 @@ typedef struct {
     uint32_t latency_ms;                  /**< 延迟要求（毫秒） */
     uint32_t buffer_size;                 /**< 缓冲区大小（帧数） */
     uint32_t buffer_count;                /**< 缓冲区数量 */
+    linx_audio_stream_priority_t priority; /**< 流优先级 */
 } linx_audio_stream_config_t;
 
 
@@ -358,6 +391,17 @@ typedef enum {
     LINX_AUDIO_MANAGER_STATE_STOPPED,
     LINX_AUDIO_MANAGER_STATE_ERROR
 } linx_audio_manager_state_t;
+
+/**
+ * @brief 音频驱动状态
+ */
+typedef enum {
+    LINX_AUDIO_DRIVER_STATE_UNINITIALIZED = 0,  /**< 未初始化 */
+    LINX_AUDIO_DRIVER_STATE_INITIALIZED,        /**< 已初始化 */
+    LINX_AUDIO_DRIVER_STATE_RUNNING,            /**< 运行中 */
+    LINX_AUDIO_DRIVER_STATE_STOPPED,            /**< 已停止 */
+    LINX_AUDIO_DRIVER_STATE_ERROR               /**< 错误状态 */
+} linx_audio_driver_state_t;
 
 // ============================================================================
 // 前向声明
@@ -414,6 +458,24 @@ typedef void (*linx_audio_error_callback_t)(
     linx_audio_stream_t* stream,
     linx_audio_error_t error,
     const char* message,
+    void* user_data
+);
+
+/**
+ * @brief 音频输入回调函数类型
+ */
+typedef void (*linx_audio_input_callback_t)(
+    void* buffer,
+    uint32_t frames,
+    void* user_data
+);
+
+/**
+ * @brief 音频输出回调函数类型
+ */
+typedef void (*linx_audio_output_callback_t)(
+    void* buffer,
+    uint32_t frames,
     void* user_data
 );
 

@@ -14,6 +14,7 @@
 #define LINX_STREAM_MANAGER_H
 
 #include "types.h"
+#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,18 +24,6 @@ extern "C" {
 typedef struct linx_stream_manager linx_stream_manager_t;
 typedef struct linx_audio_stream linx_audio_stream_t;
 typedef struct linx_audio_device linx_audio_device_t;
-
-
-
-/**
- * @brief 音频流优先级
- */
-typedef enum {
-    LINX_AUDIO_STREAM_PRIORITY_LOW = 0,     ///< 低优先级
-    LINX_AUDIO_STREAM_PRIORITY_NORMAL,      ///< 普通优先级
-    LINX_AUDIO_STREAM_PRIORITY_HIGH,        ///< 高优先级
-    LINX_AUDIO_STREAM_PRIORITY_REALTIME     ///< 实时优先级
-} linx_audio_stream_priority_t;
 
 
 

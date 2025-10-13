@@ -8,49 +8,11 @@
 #include <stdio.h>
 
 // ============================================================================
-// 内置插件注册表
+// 动态插件注册表
 // ============================================================================
 
-static const linx_builtin_plugin_descriptor_t builtin_plugins[] = {
-    {
-        .id = LINX_BUILTIN_PLUGIN_GAIN,
-        .name = "Gain",
-        .description = "Audio gain control plugin",
-        .type = LINX_PLUGIN_TYPE_EFFECT,
-        .create_func = create_gain_plugin,
-        .destroy_func = destroy_gain_plugin,
-        .get_metadata_func = get_gain_plugin_metadata
-    },
-    {
-        .id = LINX_BUILTIN_PLUGIN_EQUALIZER,
-        .name = "Equalizer",
-        .description = "Multi-band audio equalizer",
-        .type = LINX_PLUGIN_TYPE_EFFECT,
-        .create_func = create_equalizer_plugin,
-        .destroy_func = destroy_equalizer_plugin,
-        .get_metadata_func = get_equalizer_plugin_metadata
-    },
-    {
-        .id = LINX_BUILTIN_PLUGIN_DELAY,
-        .name = "Delay",
-        .description = "Audio delay and echo effect",
-        .type = LINX_PLUGIN_TYPE_EFFECT,
-        .create_func = create_delay_plugin,
-        .destroy_func = destroy_delay_plugin,
-        .get_metadata_func = get_delay_plugin_metadata
-    },
-    {
-        .id = LINX_BUILTIN_PLUGIN_REVERB,
-        .name = "Reverb",
-        .description = "Freeverb-based reverb effect",
-        .type = LINX_PLUGIN_TYPE_EFFECT,
-        .create_func = create_reverb_plugin,
-        .destroy_func = destroy_reverb_plugin,
-        .get_metadata_func = get_reverb_plugin_metadata
-    }
-};
-
-static const size_t builtin_plugins_count = sizeof(builtin_plugins) / sizeof(builtin_plugins[0]);
+static linx_builtin_plugin_descriptor_t builtin_plugins[LINX_MAX_BUILTIN_PLUGINS];
+static size_t builtin_plugins_count = 0;
 
 // ============================================================================
 // 内部状态
@@ -62,18 +24,28 @@ static bool builtin_plugins_initialized = false;
 // 公共接口实现
 // ============================================================================
 
-const linx_builtin_plugin_descriptor_t* linx_get_builtin_plugin_descriptor(linx_builtin_plugin_id_t id) {
-    if (id < 0 || id >= LINX_BUILTIN_PLUGIN_COUNT) {
-        return NULL;
+linx_audio_result_t linx_register_builtin_plugin(const linx_builtin_plugin_descriptor_t* descriptor) {
+    if (!descriptor || !descriptor->name || !descriptor->create_func || 
+        !descriptor->destroy_func || !descriptor->get_metadata_func) {
+        return LINX_AUDIO_ERROR_INVALID_PARAM;
     }
     
+    if (builtin_plugins_count >= LINX_MAX_BUILTIN_PLUGINS) {
+        return LINX_AUDIO_ERROR_BUFFER_OVERFLOW;
+    }
+    
+    // 检查是否已经注册了同名插件
     for (size_t i = 0; i < builtin_plugins_count; i++) {
-        if (builtin_plugins[i].id == id) {
-            return &builtin_plugins[i];
+        if (strcmp(builtin_plugins[i].name, descriptor->name) == 0) {
+            return LINX_AUDIO_ERROR_INVALID_STATE; // 插件已存在
         }
     }
     
-    return NULL;
+    // 复制插件描述符
+    builtin_plugins[builtin_plugins_count] = *descriptor;
+    builtin_plugins_count++;
+    
+    return LINX_AUDIO_SUCCESS;
 }
 
 const linx_builtin_plugin_descriptor_t* linx_get_all_builtin_plugin_descriptors(size_t* count) {
@@ -97,9 +69,9 @@ const linx_builtin_plugin_descriptor_t* linx_find_builtin_plugin_by_name(const c
     return NULL;
 }
 
-linx_plugin_base_t* linx_create_builtin_plugin(linx_builtin_plugin_id_t id, 
-                                               const linx_plugin_config_t* config) {
-    const linx_builtin_plugin_descriptor_t* descriptor = linx_get_builtin_plugin_descriptor(id);
+linx_plugin_base_t* linx_create_builtin_plugin_by_name(const char* name, 
+                                                       const linx_plugin_config_t* config) {
+    const linx_builtin_plugin_descriptor_t* descriptor = linx_find_builtin_plugin_by_name(name);
     if (!descriptor || !descriptor->create_func) {
         return NULL;
     }
@@ -107,12 +79,12 @@ linx_plugin_base_t* linx_create_builtin_plugin(linx_builtin_plugin_id_t id,
     return descriptor->create_func(config);
 }
 
-void linx_destroy_builtin_plugin(linx_builtin_plugin_id_t id, linx_plugin_base_t* plugin) {
-    if (!plugin) {
+void linx_destroy_builtin_plugin_by_name(const char* name, linx_plugin_base_t* plugin) {
+    if (!plugin || !name) {
         return;
     }
     
-    const linx_builtin_plugin_descriptor_t* descriptor = linx_get_builtin_plugin_descriptor(id);
+    const linx_builtin_plugin_descriptor_t* descriptor = linx_find_builtin_plugin_by_name(name);
     if (descriptor && descriptor->destroy_func) {
         descriptor->destroy_func(plugin);
     }
@@ -176,9 +148,9 @@ bool linx_is_builtin_plugin(const linx_plugin_base_t* plugin) {
     return false;
 }
 
-int linx_get_builtin_plugin_id(const linx_plugin_base_t* plugin) {
+const char* linx_get_builtin_plugin_name(const linx_plugin_base_t* plugin) {
     if (!plugin) {
-        return -1;
+        return NULL;
     }
     
     // 类似于linx_is_builtin_plugin的实现
@@ -188,12 +160,12 @@ int linx_get_builtin_plugin_id(const linx_plugin_base_t* plugin) {
             bool is_same_type = (plugin->vtable == temp->vtable);
             builtin_plugins[i].destroy_func(temp);
             if (is_same_type) {
-                return (int)builtin_plugins[i].id;
+                return builtin_plugins[i].name;
             }
         }
     }
     
-    return -1;
+    return NULL;
 }
 
 linx_audio_result_t linx_list_builtin_plugins(char* buffer, size_t buffer_size) {
@@ -208,7 +180,7 @@ linx_audio_result_t linx_list_builtin_plugins(char* buffer, size_t buffer_size) 
                       "LinxOS Audio Built-in Plugins (v%s):\n", 
                       LINX_BUILTIN_PLUGINS_VERSION_STRING);
     if (written < 0 || (size_t)written >= buffer_size - offset) {
-        return LINX_AUDIO_ERROR_BUFFER_TOO_SMALL;
+        return LINX_AUDIO_ERROR_BUFFER_OVERFLOW;
     }
     offset += written;
     
@@ -217,17 +189,17 @@ linx_audio_result_t linx_list_builtin_plugins(char* buffer, size_t buffer_size) 
         
         const char* type_str;
         switch (desc->type) {
-            case LINX_PLUGIN_TYPE_EFFECT:
+            case LINX_AUDIO_PLUGIN_TYPE_EFFECT:
                 type_str = "Effect";
                 break;
-            case LINX_PLUGIN_TYPE_GENERATOR:
-                type_str = "Generator";
+            case LINX_AUDIO_PLUGIN_TYPE_CODEC:
+                type_str = "Codec";
                 break;
-            case LINX_PLUGIN_TYPE_ANALYZER:
-                type_str = "Analyzer";
+            case LINX_AUDIO_PLUGIN_TYPE_FILTER:
+                type_str = "Filter";
                 break;
-            case LINX_PLUGIN_TYPE_UTILITY:
-                type_str = "Utility";
+            case LINX_AUDIO_PLUGIN_TYPE_DRIVER:
+                type_str = "Driver";
                 break;
             default:
                 type_str = "Unknown";
@@ -236,9 +208,9 @@ linx_audio_result_t linx_list_builtin_plugins(char* buffer, size_t buffer_size) 
         
         written = snprintf(buffer + offset, buffer_size - offset,
                           "  %d. %s (%s) - %s\n",
-                          (int)desc->id + 1, desc->name, type_str, desc->description);
+                          (int)i + 1, desc->name, type_str, desc->description);
         if (written < 0 || (size_t)written >= buffer_size - offset) {
-            return LINX_AUDIO_ERROR_BUFFER_TOO_SMALL;
+            return LINX_AUDIO_ERROR_BUFFER_OVERFLOW;
         }
         offset += written;
     }
@@ -259,16 +231,16 @@ linx_audio_result_t linx_get_builtin_plugin_stats(linx_builtin_plugin_stats_t* s
         stats->total_plugins++;
         
         switch (desc->type) {
-            case LINX_PLUGIN_TYPE_EFFECT:
+            case LINX_AUDIO_PLUGIN_TYPE_EFFECT:
                 stats->effect_plugins++;
                 break;
-            case LINX_PLUGIN_TYPE_GENERATOR:
+            case LINX_AUDIO_PLUGIN_TYPE_CODEC:
                 stats->generator_plugins++;
                 break;
-            case LINX_PLUGIN_TYPE_ANALYZER:
+            case LINX_AUDIO_PLUGIN_TYPE_FILTER:
                 stats->analyzer_plugins++;
                 break;
-            case LINX_PLUGIN_TYPE_UTILITY:
+            case LINX_AUDIO_PLUGIN_TYPE_DRIVER:
                 stats->utility_plugins++;
                 break;
             default:

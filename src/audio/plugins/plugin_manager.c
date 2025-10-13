@@ -9,6 +9,7 @@
 #include "../../common/log/linx_log.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <pthread.h>
 #include <dlfcn.h>
 #include <dirent.h>
@@ -33,6 +34,10 @@ static linx_audio_result_t linx_registry_init(linx_plugin_registry_t* registry, 
 static void linx_registry_cleanup(linx_plugin_registry_t* registry);
 static linx_audio_result_t linx_loader_init(linx_plugin_loader_t* loader, const linx_plugin_loader_config_t* config);
 static void linx_loader_cleanup(linx_plugin_loader_t* loader);
+static linx_plugin_info_t* find_plugin_by_name(linx_plugin_manager_t* manager, const char* name);
+static uint32_t find_instance_index(linx_plugin_manager_t* manager, linx_plugin_base_t* instance);
+static linx_audio_result_t add_instance_to_array(linx_plugin_manager_t* manager, linx_plugin_base_t* instance);
+static linx_audio_result_t remove_instance_from_array(linx_plugin_manager_t* manager, uint32_t index);
 
 // ============================================================================
 // 默认配置
@@ -266,8 +271,70 @@ linx_audio_result_t linx_plugin_manager_create_instance(linx_plugin_manager_t* m
     
     pthread_mutex_lock(&manager->mutex);
     
-    // TODO: 实现实例创建逻辑
-    *instance = NULL;
+    // 检查实例数量限制
+    if (manager->instance_count >= manager->config.max_instances) {
+        pthread_mutex_unlock(&manager->mutex);
+        return LINX_AUDIO_ERROR_OUT_OF_MEMORY;
+    }
+    
+    // 查找插件信息
+    linx_plugin_info_t* plugin_info = find_plugin_by_name(manager, name);
+    
+    if (!plugin_info) {
+        pthread_mutex_unlock(&manager->mutex);
+        return LINX_AUDIO_ERROR_NOT_FOUND;
+    }
+    
+    // 检查插件是否已加载
+    if (plugin_info->status != PLUGIN_STATUS_READY && 
+        plugin_info->status != PLUGIN_STATUS_LOADED) {
+        pthread_mutex_unlock(&manager->mutex);
+        return LINX_AUDIO_ERROR_NOT_INITIALIZED;
+    }
+    
+    // 创建插件实例
+    linx_plugin_base_t* new_instance = NULL;
+    if (plugin_info->instance) {
+        // 如果已有实例，增加引用计数
+        new_instance = plugin_info->instance;
+        linx_plugin_base_ref(new_instance);
+    } else {
+        // 创建新实例
+        if (plugin_info->library_handle) {
+            // 从动态库获取创建函数
+            typedef linx_plugin_base_t* (*create_func_t)(const linx_plugin_config_t*);
+            create_func_t create_func = (create_func_t)dlsym(plugin_info->library_handle, "create_plugin");
+            
+            if (create_func) {
+                new_instance = create_func(config);
+                if (new_instance) {
+                    // 设置实例ID
+                    new_instance->private_data = (void*)(uintptr_t)manager->next_instance_id++;
+                    plugin_info->instance = new_instance;
+                    linx_plugin_base_ref(new_instance);
+                }
+            }
+        }
+    }
+    
+    if (!new_instance) {
+        pthread_mutex_unlock(&manager->mutex);
+        return LINX_AUDIO_ERROR_PLUGIN_ERROR;
+    }
+    
+    // 添加到实例数组
+    linx_audio_result_t result = add_instance_to_array(manager, new_instance);
+    if (result != LINX_AUDIO_SUCCESS) {
+        // 如果添加失败，需要清理已创建的实例
+        if (plugin_info->instance == new_instance) {
+            plugin_info->instance = NULL;
+        }
+        linx_plugin_base_unref(new_instance);
+        pthread_mutex_unlock(&manager->mutex);
+        return result;
+    }
+    
+    *instance = new_instance;
     
     pthread_mutex_unlock(&manager->mutex);
     return LINX_AUDIO_SUCCESS;
@@ -282,7 +349,38 @@ linx_audio_result_t linx_plugin_manager_destroy_instance(linx_plugin_manager_t* 
     
     pthread_mutex_lock(&manager->mutex);
     
-    // TODO: 实现实例销毁逻辑
+    // 查找实例在数组中的位置
+    uint32_t instance_index = find_instance_index(manager, instance);
+    if (instance_index == UINT32_MAX) {
+        pthread_mutex_unlock(&manager->mutex);
+        return LINX_AUDIO_ERROR_NOT_FOUND;
+    }
+    
+    // 获取实例ID
+    //uint32_t instance_id = (uint32_t)(uintptr_t)instance->private_data;
+    
+    // 减少引用计数
+    uint32_t ref_count = linx_plugin_base_unref(instance);
+    
+    // 如果引用计数为0，销毁实例
+    if (ref_count == 0) {
+        // 查找对应的插件信息并清除实例引用
+        for (uint32_t i = 0; i < manager->registry->plugin_count; i++) {
+            if (manager->registry->plugins[i] && 
+                manager->registry->plugins[i]->instance == instance) {
+                manager->registry->plugins[i]->instance = NULL;
+                break;
+            }
+        }
+        
+        // 调用插件的销毁函数
+        if (instance->vtable && instance->vtable->destroy) {
+            instance->vtable->destroy(instance);
+        }
+    }
+    
+    // 从实例数组中移除
+    remove_instance_from_array(manager, instance_index);
     
     pthread_mutex_unlock(&manager->mutex);
     return LINX_AUDIO_SUCCESS;
@@ -354,4 +452,77 @@ static void linx_loader_cleanup(linx_plugin_loader_t* loader)
     }
     
     pthread_mutex_destroy(&loader->mutex);
+}
+
+// ============================================================================
+// 辅助函数实现
+// ============================================================================
+
+static linx_plugin_info_t* find_plugin_by_name(linx_plugin_manager_t* manager, const char* name)
+{
+    if (!manager || !name || !manager->registry) {
+        return NULL;
+    }
+    
+    for (uint32_t i = 0; i < manager->registry->plugin_count; i++) {
+        if (manager->registry->plugins[i] && 
+            strcmp(manager->registry->plugins[i]->name, name) == 0) {
+            return manager->registry->plugins[i];
+        }
+    }
+    
+    return NULL;
+}
+
+static uint32_t find_instance_index(linx_plugin_manager_t* manager, linx_plugin_base_t* instance)
+{
+    if (!manager || !instance || !manager->instances) {
+        return UINT32_MAX;
+    }
+    
+    for (uint32_t i = 0; i < manager->instance_count; i++) {
+        if (manager->instances[i] == instance) {
+            return i;
+        }
+    }
+    
+    return UINT32_MAX;
+}
+
+static linx_audio_result_t add_instance_to_array(linx_plugin_manager_t* manager, linx_plugin_base_t* instance)
+{
+    if (!manager || !instance || !manager->instances) {
+        return LINX_AUDIO_ERROR_INVALID_PARAM;
+    }
+    
+    if (manager->instance_count >= manager->config.max_instances) {
+        return LINX_AUDIO_ERROR_OUT_OF_MEMORY;
+    }
+    
+    manager->instances[manager->instance_count] = instance;
+    manager->instance_count++;
+    manager->stats.active_instances++;
+    
+    return LINX_AUDIO_SUCCESS;
+}
+
+static linx_audio_result_t remove_instance_from_array(linx_plugin_manager_t* manager, uint32_t index)
+{
+    if (!manager || !manager->instances || index >= manager->instance_count) {
+        return LINX_AUDIO_ERROR_INVALID_PARAM;
+    }
+    
+    // 移动数组元素
+    for (uint32_t i = index; i < manager->instance_count - 1; i++) {
+        manager->instances[i] = manager->instances[i + 1];
+    }
+    
+    manager->instances[manager->instance_count - 1] = NULL;
+    manager->instance_count--;
+    
+    if (manager->stats.active_instances > 0) {
+        manager->stats.active_instances--;
+    }
+    
+    return LINX_AUDIO_SUCCESS;
 }

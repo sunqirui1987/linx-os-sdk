@@ -25,100 +25,19 @@ extern "C" {
 #define LINX_BUILTIN_PLUGINS_VERSION_STRING "@PROJECT_VERSION@"
 
 // ============================================================================
-// 内置插件ID
-// ============================================================================
-
-typedef enum {
-    LINX_BUILTIN_PLUGIN_GAIN = 0,
-    LINX_BUILTIN_PLUGIN_EQUALIZER,
-    LINX_BUILTIN_PLUGIN_DELAY,
-    LINX_BUILTIN_PLUGIN_REVERB,
-    LINX_BUILTIN_PLUGIN_COUNT
-} linx_builtin_plugin_id_t;
-
-// ============================================================================
-// 插件工厂函数声明
+// 动态插件注册系统
 // ============================================================================
 
 /**
- * @brief 创建增益插件
- * @param config 插件配置
- * @return 插件实例指针，失败返回NULL
+ * @brief 插件注册函数类型
+ * @details 每个插件模块应该实现这个函数来注册自己
  */
-linx_plugin_base_t* create_gain_plugin(const linx_plugin_config_t* config);
+typedef void (*linx_plugin_register_func_t)(void);
 
 /**
- * @brief 销毁增益插件
- * @param plugin 插件实例
+ * @brief 最大支持的内置插件数量
  */
-void destroy_gain_plugin(linx_plugin_base_t* plugin);
-
-/**
- * @brief 获取增益插件元数据
- * @param metadata 元数据结构指针
- * @return 操作结果
- */
-linx_audio_result_t get_gain_plugin_metadata(linx_plugin_metadata_t* metadata);
-
-/**
- * @brief 创建均衡器插件
- * @param config 插件配置
- * @return 插件实例指针，失败返回NULL
- */
-linx_plugin_base_t* create_equalizer_plugin(const linx_plugin_config_t* config);
-
-/**
- * @brief 销毁均衡器插件
- * @param plugin 插件实例
- */
-void destroy_equalizer_plugin(linx_plugin_base_t* plugin);
-
-/**
- * @brief 获取均衡器插件元数据
- * @param metadata 元数据结构指针
- * @return 操作结果
- */
-linx_audio_result_t get_equalizer_plugin_metadata(linx_plugin_metadata_t* metadata);
-
-/**
- * @brief 创建延迟插件
- * @param config 插件配置
- * @return 插件实例指针，失败返回NULL
- */
-linx_plugin_base_t* create_delay_plugin(const linx_plugin_config_t* config);
-
-/**
- * @brief 销毁延迟插件
- * @param plugin 插件实例
- */
-void destroy_delay_plugin(linx_plugin_base_t* plugin);
-
-/**
- * @brief 获取延迟插件元数据
- * @param metadata 元数据结构指针
- * @return 操作结果
- */
-linx_audio_result_t get_delay_plugin_metadata(linx_plugin_metadata_t* metadata);
-
-/**
- * @brief 创建混响插件
- * @param config 插件配置
- * @return 插件实例指针，失败返回NULL
- */
-linx_plugin_base_t* create_reverb_plugin(const linx_plugin_config_t* config);
-
-/**
- * @brief 销毁混响插件
- * @param plugin 插件实例
- */
-void destroy_reverb_plugin(linx_plugin_base_t* plugin);
-
-/**
- * @brief 获取混响插件元数据
- * @param metadata 元数据结构指针
- * @return 操作结果
- */
-linx_audio_result_t get_reverb_plugin_metadata(linx_plugin_metadata_t* metadata);
+#define LINX_MAX_BUILTIN_PLUGINS 32
 
 // ============================================================================
 // 插件注册表
@@ -128,21 +47,20 @@ linx_audio_result_t get_reverb_plugin_metadata(linx_plugin_metadata_t* metadata)
  * @brief 内置插件描述符
  */
 typedef struct {
-    linx_builtin_plugin_id_t id;
     const char* name;
     const char* description;
-    linx_plugin_type_t type;
+    linx_audio_plugin_type_t type;
     linx_plugin_base_t* (*create_func)(const linx_plugin_config_t* config);
     void (*destroy_func)(linx_plugin_base_t* plugin);
     linx_audio_result_t (*get_metadata_func)(linx_plugin_metadata_t* metadata);
 } linx_builtin_plugin_descriptor_t;
 
 /**
- * @brief 获取内置插件描述符
- * @param id 插件ID
- * @return 插件描述符指针，失败返回NULL
+ * @brief 注册内置插件
+ * @param descriptor 插件描述符
+ * @return 操作结果
  */
-const linx_builtin_plugin_descriptor_t* linx_get_builtin_plugin_descriptor(linx_builtin_plugin_id_t id);
+linx_audio_result_t linx_register_builtin_plugin(const linx_builtin_plugin_descriptor_t* descriptor);
 
 /**
  * @brief 获取所有内置插件描述符
@@ -159,20 +77,20 @@ const linx_builtin_plugin_descriptor_t* linx_get_all_builtin_plugin_descriptors(
 const linx_builtin_plugin_descriptor_t* linx_find_builtin_plugin_by_name(const char* name);
 
 /**
- * @brief 创建内置插件实例
- * @param id 插件ID
+ * @brief 根据名称创建内置插件实例
+ * @param name 插件名称
  * @param config 插件配置
  * @return 插件实例指针，失败返回NULL
  */
-linx_plugin_base_t* linx_create_builtin_plugin(linx_builtin_plugin_id_t id, 
-                                               const linx_plugin_config_t* config);
+linx_plugin_base_t* linx_create_builtin_plugin_by_name(const char* name, 
+                                                       const linx_plugin_config_t* config);
 
 /**
  * @brief 销毁内置插件实例
- * @param id 插件ID
+ * @param name 插件名称
  * @param plugin 插件实例
  */
-void linx_destroy_builtin_plugin(linx_builtin_plugin_id_t id, linx_plugin_base_t* plugin);
+void linx_destroy_builtin_plugin_by_name(const char* name, linx_plugin_base_t* plugin);
 
 /**
  * @brief 初始化内置插件系统
@@ -197,23 +115,26 @@ const char* linx_builtin_plugins_get_version(void);
 
 /**
  * @brief 注册内置插件的宏
- * @param id 插件ID
- * @param name 插件名称
+ * @param plugin_name 插件名称（用作标识符）
+ * @param name_str 插件名称字符串
  * @param desc 插件描述
  * @param type 插件类型
  * @param create_func 创建函数
  * @param destroy_func 销毁函数
  * @param metadata_func 元数据获取函数
  */
-#define LINX_REGISTER_BUILTIN_PLUGIN(id, name, desc, type, create_func, destroy_func, metadata_func) \
-    static const linx_builtin_plugin_descriptor_t builtin_plugin_##id = { \
-        .id = LINX_BUILTIN_PLUGIN_##id, \
-        .name = name, \
+#define LINX_REGISTER_BUILTIN_PLUGIN(plugin_name, name_str, desc, plugin_type, create_fn, destroy_fn, metadata_fn) \
+    static const linx_builtin_plugin_descriptor_t builtin_plugin_##plugin_name = { \
+        .name = name_str, \
         .description = desc, \
-        .type = type, \
-        .create_func = create_func, \
-        .destroy_func = destroy_func, \
-        .get_metadata_func = metadata_func \
+        .type = plugin_type, \
+        .create_func = create_fn, \
+        .destroy_func = destroy_fn, \
+        .get_metadata_func = metadata_fn \
+    }; \
+    static void register_##plugin_name##_plugin(void) __attribute__((constructor)); \
+    static void register_##plugin_name##_plugin(void) { \
+        linx_register_builtin_plugin(&builtin_plugin_##plugin_name); \
     }
 
 // ============================================================================
@@ -228,11 +149,11 @@ const char* linx_builtin_plugins_get_version(void);
 bool linx_is_builtin_plugin(const linx_plugin_base_t* plugin);
 
 /**
- * @brief 获取内置插件的ID
+ * @brief 获取内置插件的名称
  * @param plugin 插件实例
- * @return 插件ID，如果不是内置插件返回-1
+ * @return 插件名称，如果不是内置插件返回NULL
  */
-int linx_get_builtin_plugin_id(const linx_plugin_base_t* plugin);
+const char* linx_get_builtin_plugin_name(const linx_plugin_base_t* plugin);
 
 /**
  * @brief 列出所有可用的内置插件

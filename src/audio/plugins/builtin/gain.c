@@ -6,9 +6,11 @@
 
 #include "../plugin_interface.h"
 #include "../../core/types.h"
+#include "builtin_plugins.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 // ============================================================================
 // 增益插件私有数据结构
@@ -87,9 +89,7 @@ static float db_to_linear(float db) {
     return powf(10.0f, db / 20.0f);
 }
 
-static float linear_to_db(float linear) {
-    return 20.0f * log10f(linear);
-}
+
 
 static void process_audio_samples(gain_plugin_t* gain, 
                                 const float* input, 
@@ -131,6 +131,8 @@ static void process_audio_samples(gain_plugin_t* gain,
 // ============================================================================
 
 static linx_audio_result_t gain_initialize(linx_plugin_base_t* plugin, const linx_plugin_config_t* config) {
+    (void)config; // 避免未使用参数警告
+    
     if (!plugin) {
         return LINX_AUDIO_ERROR_INVALID_PARAM;
     }
@@ -195,14 +197,14 @@ static linx_audio_result_t gain_process(linx_plugin_base_t* plugin,
     gain_plugin_t* gain = (gain_plugin_t*)plugin;
     
     // 检查缓冲区格式
-    if (input->frame_count != output->frame_count ||
-        input->channels != output->channels) {
-        return LINX_AUDIO_ERROR_INVALID_FORMAT;
+    if (input->frames != output->frames ||
+        input->params.channels != output->params.channels) {
+        return LINX_AUDIO_ERROR_UNSUPPORTED_FORMAT;
     }
     
     // 静音处理
     if (gain->mute) {
-        memset(output->data, 0, output->frame_count * output->channels * sizeof(float));
+        memset(output->data, 0, output->frames * output->params.channels * sizeof(float));
         return LINX_AUDIO_SUCCESS;
     }
     
@@ -210,8 +212,8 @@ static linx_audio_result_t gain_process(linx_plugin_base_t* plugin,
     process_audio_samples(gain, 
                          (const float*)input->data,
                          (float*)output->data,
-                         input->frame_count,
-                         input->channels);
+                         input->frames,
+                         input->params.channels);
     
     return LINX_AUDIO_SUCCESS;
 }
@@ -304,11 +306,11 @@ linx_plugin_base_t* create_gain_plugin(const linx_plugin_config_t* config) {
     // 初始化基础插件结构
     linx_plugin_metadata_t metadata = {
         .name = "Gain",
-        .version = {1, 0, 0},
+        .version = {1, 0, 0, NULL},
         .description = "Audio gain control plugin",
         .author = "LinxOS Audio Team",
         .license = "MIT",
-        .type = LINX_PLUGIN_TYPE_EFFECT
+        .type = LINX_AUDIO_PLUGIN_TYPE_EFFECT
     };
     
     linx_audio_result_t result = linx_plugin_base_init(&gain->base, &gain_vtable, &metadata);
@@ -345,22 +347,16 @@ linx_audio_result_t get_gain_plugin_metadata(linx_plugin_metadata_t* metadata) {
     metadata->description = "Audio gain control plugin";
     metadata->author = "LinxOS Audio Team";
     metadata->license = "MIT";
-    metadata->type = LINX_PLUGIN_TYPE_EFFECT;
+    metadata->type = LINX_AUDIO_PLUGIN_TYPE_EFFECT;
     
     return LINX_AUDIO_SUCCESS;
 }
 
-// 插件描述符
-LINX_PLUGIN_IMPLEMENT(gain, {
-    .metadata = {
-        .name = "Gain",
-        .version = {1, 0, 0},
-        .description = "Audio gain control plugin",
-        .author = "LinxOS Audio Team",
-        .license = "MIT",
-        .type = LINX_PLUGIN_TYPE_EFFECT
-    },
-    .create_func = create_gain_plugin,
-    .destroy_func = destroy_gain_plugin,
-    .get_metadata_func = get_gain_plugin_metadata
-});
+// 插件自动注册
+LINX_REGISTER_BUILTIN_PLUGIN(gain, 
+                             "Gain", 
+                             "Audio gain control plugin", 
+                             LINX_AUDIO_PLUGIN_TYPE_EFFECT,
+                             create_gain_plugin, 
+                             destroy_gain_plugin, 
+                             get_gain_plugin_metadata);

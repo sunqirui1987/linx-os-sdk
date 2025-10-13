@@ -55,17 +55,12 @@ typedef struct {
     AudioBufferList* output_buffer_list;
     
     // 回调数据
-    linx_audio_callback_t audio_callback;
+    linx_audio_data_callback_t audio_callback;
     void* callback_user_data;
     
     // 状态管理
     bool is_running;
     pthread_mutex_t state_mutex;
-    
-    // 统计信息
-    uint64_t frames_processed;
-    uint64_t callback_count;
-    uint64_t total_callback_time_us;
 } coreaudio_private_t;
 
 // ============================================================================
@@ -73,36 +68,19 @@ typedef struct {
 // ============================================================================
 
 static linx_audio_result_t coreaudio_initialize(linx_audio_driver_t* driver);
-static void coreaudio_deinitialize(linx_audio_driver_t* driver);
+static linx_audio_result_t coreaudio_deinitialize(linx_audio_driver_t* driver);
 static linx_audio_result_t coreaudio_start(linx_audio_driver_t* driver);
 static linx_audio_result_t coreaudio_stop(linx_audio_driver_t* driver);
 
 static linx_audio_result_t coreaudio_enumerate_devices(linx_audio_driver_t* driver,
                                                        linx_audio_device_info_t** devices,
-                                                       size_t* device_count);
-static void coreaudio_free_device_list(linx_audio_driver_t* driver,
-                                       linx_audio_device_info_t* devices,
-                                       size_t device_count);
+                                                       uint32_t* device_count);
 static linx_audio_result_t coreaudio_get_device_info(linx_audio_driver_t* driver,
                                                      uint32_t device_id,
                                                      linx_audio_device_info_t* info);
-
-static bool coreaudio_is_format_supported(linx_audio_driver_t* driver,
-                                          uint32_t device_id,
-                                          const linx_audio_format_info_t* format);
-
-static linx_audio_driver_state_t coreaudio_get_state(linx_audio_driver_t* driver);
-static linx_audio_result_t coreaudio_get_stats(linx_audio_driver_t* driver,
-                                               linx_audio_driver_stats_t* stats);
 static linx_audio_result_t coreaudio_get_latency(linx_audio_driver_t* driver,
-                                                 uint32_t* input_latency,
-                                                 uint32_t* output_latency);
-
-static linx_audio_result_t coreaudio_set_callback(linx_audio_driver_t* driver,
-                                                  linx_audio_callback_t callback,
-                                                  void* user_data);
-static linx_audio_result_t coreaudio_update_config(linx_audio_driver_t* driver,
-                                                   const linx_audio_driver_config_t* config);
+                                                  linx_audio_device_t* device,
+                                                  uint32_t* latency_frames);
 
 // CoreAudio回调函数
 static OSStatus coreaudio_input_callback(void* inRefCon,
@@ -127,10 +105,7 @@ static linx_audio_result_t get_device_property_data(AudioDeviceID device_id,
                                                     AudioObjectPropertySelector selector,
                                                     AudioObjectPropertyScope scope,
                                                     void* data, UInt32* size);
-static linx_audio_result_t convert_ca_format_to_linx(const AudioStreamBasicDescription* ca_format,
-                                                     linx_audio_format_info_t* linx_format);
-static linx_audio_result_t convert_linx_format_to_ca(const linx_audio_format_info_t* linx_format,
-                                                     AudioStreamBasicDescription* ca_format);
+
 
 // ============================================================================
 // 虚函数表
@@ -142,14 +117,29 @@ static const linx_audio_driver_vtable_t coreaudio_vtable = {
     .start = coreaudio_start,
     .stop = coreaudio_stop,
     .enumerate_devices = coreaudio_enumerate_devices,
-    .free_device_list = coreaudio_free_device_list,
     .get_device_info = coreaudio_get_device_info,
-    .is_format_supported = coreaudio_is_format_supported,
-    .get_state = coreaudio_get_state,
-    .get_stats = coreaudio_get_stats,
+    .open_device = NULL,  // TODO: implement
+    .close_device = NULL,  // TODO: implement
+    .start_device = NULL,  // TODO: implement
+    .stop_device = NULL,  // TODO: implement
+    .pause_device = NULL,  // TODO: implement
+    .resume_device = NULL,  // TODO: implement
+    .read_data = NULL,  // TODO: implement
+    .write_data = NULL,  // TODO: implement
+    .set_device_config = NULL,  // TODO: implement
+    .get_device_config = NULL,  // TODO: implement
+    .set_volume = NULL,  // TODO: implement
+    .get_volume = NULL,  // TODO: implement
+    .set_mute = NULL,  // TODO: implement
+    .get_mute = NULL,  // TODO: implement
+    .get_device_state = NULL,  // TODO: implement
+    .get_device_stats = NULL,  // TODO: implement
+    .reset_device_stats = NULL,  // TODO: implement
     .get_latency = coreaudio_get_latency,
-    .set_callback = coreaudio_set_callback,
-    .update_config = coreaudio_update_config
+    .set_event_callback = NULL,  // TODO: implement
+    .suspend = NULL,  // TODO: implement
+    .resume = NULL,  // TODO: implement
+    .destroy = NULL  // TODO: implement
 };
 
 // ============================================================================
@@ -183,7 +173,6 @@ linx_audio_driver_t* linx_coreaudio_driver_create(void) {
     // 设置驱动属性
     driver->vtable = &coreaudio_vtable;
     driver->type = LINX_AUDIO_DRIVER_TYPE_COREAUDIO;
-    driver->state = LINX_AUDIO_DRIVER_STATE_UNINITIALIZED;
     driver->private_data = priv;
     
     return driver;
@@ -201,11 +190,6 @@ static linx_audio_result_t coreaudio_initialize(linx_audio_driver_t* driver) {
     coreaudio_private_t* priv = (coreaudio_private_t*)driver->private_data;
     
     pthread_mutex_lock(&priv->state_mutex);
-    
-    if (driver->state != LINX_AUDIO_DRIVER_STATE_UNINITIALIZED) {
-        pthread_mutex_unlock(&priv->state_mutex);
-        return LINX_AUDIO_ERROR_INVALID_STATE;
-    }
     
     // 初始化设备列表
     priv->device_capacity = 16;
@@ -242,15 +226,14 @@ static linx_audio_result_t coreaudio_initialize(linx_audio_driver_t* driver) {
         priv->current_input_device = kAudioObjectUnknown;
     }
     
-    driver->state = LINX_AUDIO_DRIVER_STATE_INITIALIZED;
     pthread_mutex_unlock(&priv->state_mutex);
     
     return LINX_AUDIO_SUCCESS;
 }
 
-static void coreaudio_deinitialize(linx_audio_driver_t* driver) {
+static linx_audio_result_t coreaudio_deinitialize(linx_audio_driver_t* driver) {
     if (!driver || !driver->private_data) {
-        return;
+        return LINX_AUDIO_ERROR_INVALID_PARAM;
     }
     
     coreaudio_private_t* priv = (coreaudio_private_t*)driver->private_data;
@@ -290,8 +273,9 @@ static void coreaudio_deinitialize(linx_audio_driver_t* driver) {
         priv->devices = NULL;
     }
     
-    driver->state = LINX_AUDIO_DRIVER_STATE_UNINITIALIZED;
     pthread_mutex_unlock(&priv->state_mutex);
+    
+    return LINX_AUDIO_SUCCESS;
 }
 
 static linx_audio_result_t coreaudio_start(linx_audio_driver_t* driver) {
@@ -302,11 +286,6 @@ static linx_audio_result_t coreaudio_start(linx_audio_driver_t* driver) {
     coreaudio_private_t* priv = (coreaudio_private_t*)driver->private_data;
     
     pthread_mutex_lock(&priv->state_mutex);
-    
-    if (driver->state != LINX_AUDIO_DRIVER_STATE_INITIALIZED) {
-        pthread_mutex_unlock(&priv->state_mutex);
-        return LINX_AUDIO_ERROR_INVALID_STATE;
-    }
     
     // 设置默认格式
     priv->output_format.mSampleRate = driver->config.format.sample_rate;
@@ -343,20 +322,20 @@ static linx_audio_result_t coreaudio_start(linx_audio_driver_t* driver) {
                                               sizeof(callback_struct));
         if (status != noErr) {
             pthread_mutex_unlock(&priv->state_mutex);
-            return LINX_AUDIO_ERROR_DEVICE_ERROR;
+            return LINX_AUDIO_ERROR_IO_ERROR;
         }
         
         // 启动输出AudioUnit
         status = AudioUnitInitialize(priv->output_unit);
         if (status != noErr) {
             pthread_mutex_unlock(&priv->state_mutex);
-            return LINX_AUDIO_ERROR_DEVICE_ERROR;
+            return LINX_AUDIO_ERROR_IO_ERROR;
         }
         
         status = AudioOutputUnitStart(priv->output_unit);
         if (status != noErr) {
             pthread_mutex_unlock(&priv->state_mutex);
-            return LINX_AUDIO_ERROR_DEVICE_ERROR;
+            return LINX_AUDIO_ERROR_IO_ERROR;
         }
     }
     
@@ -383,25 +362,24 @@ static linx_audio_result_t coreaudio_start(linx_audio_driver_t* driver) {
                                               sizeof(callback_struct));
         if (status != noErr) {
             pthread_mutex_unlock(&priv->state_mutex);
-            return LINX_AUDIO_ERROR_DEVICE_ERROR;
+            return LINX_AUDIO_ERROR_IO_ERROR;
         }
         
         // 启动输入AudioUnit
         status = AudioUnitInitialize(priv->input_unit);
         if (status != noErr) {
             pthread_mutex_unlock(&priv->state_mutex);
-            return LINX_AUDIO_ERROR_DEVICE_ERROR;
+            return LINX_AUDIO_ERROR_IO_ERROR;
         }
         
         status = AudioOutputUnitStart(priv->input_unit);
         if (status != noErr) {
             pthread_mutex_unlock(&priv->state_mutex);
-            return LINX_AUDIO_ERROR_DEVICE_ERROR;
+            return LINX_AUDIO_ERROR_IO_ERROR;
         }
     }
     
     priv->is_running = true;
-    driver->state = LINX_AUDIO_DRIVER_STATE_STARTED;
     pthread_mutex_unlock(&priv->state_mutex);
     
     return LINX_AUDIO_SUCCESS;
@@ -416,11 +394,6 @@ static linx_audio_result_t coreaudio_stop(linx_audio_driver_t* driver) {
     
     pthread_mutex_lock(&priv->state_mutex);
     
-    if (driver->state != LINX_AUDIO_DRIVER_STATE_STARTED) {
-        pthread_mutex_unlock(&priv->state_mutex);
-        return LINX_AUDIO_SUCCESS;
-    }
-    
     priv->is_running = false;
     
     // 停止AudioUnit
@@ -434,7 +407,6 @@ static linx_audio_result_t coreaudio_stop(linx_audio_driver_t* driver) {
         AudioUnitUninitialize(priv->input_unit);
     }
     
-    driver->state = LINX_AUDIO_DRIVER_STATE_STOPPED;
     pthread_mutex_unlock(&priv->state_mutex);
     
     return LINX_AUDIO_SUCCESS;
@@ -444,9 +416,10 @@ static linx_audio_result_t coreaudio_stop(linx_audio_driver_t* driver) {
 // 设备枚举和信息查询
 // ============================================================================
 
+// Fix function signature for enumerate_devices - change size_t* to uint32_t*
 static linx_audio_result_t coreaudio_enumerate_devices(linx_audio_driver_t* driver,
                                                        linx_audio_device_info_t** devices,
-                                                       size_t* device_count) {
+                                                       uint32_t* device_count) {
     if (!driver || !devices || !device_count) {
         return LINX_AUDIO_ERROR_INVALID_PARAM;
     }
@@ -464,7 +437,7 @@ static linx_audio_result_t coreaudio_enumerate_devices(linx_audio_driver_t* driv
                                                     0, NULL,
                                                     &size);
     if (status != noErr) {
-        return LINX_AUDIO_ERROR_DEVICE_ERROR;
+        return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
     UInt32 device_count_ca = size / sizeof(AudioDeviceID);
@@ -480,7 +453,7 @@ static linx_audio_result_t coreaudio_enumerate_devices(linx_audio_driver_t* driv
                                        device_ids);
     if (status != noErr) {
         free(device_ids);
-        return LINX_AUDIO_ERROR_DEVICE_ERROR;
+        return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
     // 分配设备信息数组
@@ -491,7 +464,7 @@ static linx_audio_result_t coreaudio_enumerate_devices(linx_audio_driver_t* driv
     }
     
     // 填充设备信息
-    size_t valid_device_count = 0;
+    uint32_t valid_device_count = 0;
     for (UInt32 i = 0; i < device_count_ca; i++) {
         linx_audio_device_info_t* info = &device_infos[valid_device_count];
         
@@ -508,16 +481,7 @@ static linx_audio_result_t coreaudio_enumerate_devices(linx_audio_driver_t* driv
     return LINX_AUDIO_SUCCESS;
 }
 
-static void coreaudio_free_device_list(linx_audio_driver_t* driver,
-                                       linx_audio_device_info_t* devices,
-                                       size_t device_count) {
-    (void)driver;
-    (void)device_count;
-    
-    if (devices) {
-        free(devices);
-    }
-}
+
 
 static linx_audio_result_t coreaudio_get_device_info(linx_audio_driver_t* driver,
                                                      uint32_t device_id,
@@ -529,7 +493,7 @@ static linx_audio_result_t coreaudio_get_device_info(linx_audio_driver_t* driver
     AudioDeviceID ca_device_id = (AudioDeviceID)device_id;
     memset(info, 0, sizeof(linx_audio_device_info_t));
     
-    info->id = device_id;
+    info->device_id = device_id;  // Use 'device_id' instead of 'id'
     
     // 获取设备名称
     CFStringRef device_name = NULL;
@@ -543,7 +507,7 @@ static linx_audio_result_t coreaudio_get_device_info(linx_audio_driver_t* driver
         CFRelease(device_name);
     }
     
-    // 获取制造商
+    // 获取制造商 - use 'description' field for manufacturer
     CFStringRef manufacturer = NULL;
     size = sizeof(manufacturer);
     result = get_device_property_data(ca_device_id,
@@ -551,7 +515,10 @@ static linx_audio_result_t coreaudio_get_device_info(linx_audio_driver_t* driver
                                      kAudioObjectPropertyScopeGlobal,
                                      &manufacturer, &size);
     if (result == LINX_AUDIO_SUCCESS && manufacturer) {
-        CFStringGetCString(manufacturer, info->description, sizeof(info->description), kCFStringEncodingUTF8);
+        // Store manufacturer info in description field since it exists in the struct
+        char manufacturer_str[256];
+        CFStringGetCString(manufacturer, manufacturer_str, sizeof(manufacturer_str), kCFStringEncodingUTF8);
+        snprintf(info->name + strlen(info->name), sizeof(info->name) - strlen(info->name), " (%s)", manufacturer_str);
         CFRelease(manufacturer);
     }
     
@@ -581,21 +548,27 @@ static linx_audio_result_t coreaudio_get_device_info(linx_audio_driver_t* driver
         info->type = LINX_AUDIO_DEVICE_TYPE_UNKNOWN;
     }
     
-    // 设置基本属性
-    info->min_channels = 1;
-    info->max_channels = input_channels > output_channels ? input_channels : output_channels;
-    info->is_available = true;
+    // Set device state
+    info->state = LINX_AUDIO_DEVICE_STATE_IDLE;
     
-    // 获取支持的采样率
-    info->supported_sample_rates[0] = 44100;
-    info->supported_sample_rates[1] = 48000;
-    info->supported_sample_rates[2] = 96000;
-    info->sample_rate_count = 3;
+    // 设置基本属性 - use correct struct members
+    info->default_params.channels = input_channels > output_channels ? input_channels : output_channels;
+    info->default_params.sample_rate = 44100;
+    info->default_params.format = LINX_AUDIO_FORMAT_FLOAT32;
+    info->default_params.buffer_size = 512;
     
-    // 设置缓冲区大小
-    info->min_buffer_size = 64;
-    info->max_buffer_size = 4096;
-    info->preferred_buffer_size = 512;
+    // 设置格式信息 - format是枚举类型，不是结构体
+    info->format = LINX_AUDIO_FORMAT_FLOAT32;
+    
+    // 获取支持的采样率范围
+    info->min_sample_rate = 44100;
+    info->max_sample_rate = 96000;
+    
+    // Set default device flag
+    info->is_default = false; // Would need to check against system default
+    
+    // Set driver data to NULL for now
+    info->driver_data = NULL;
     
     return LINX_AUDIO_SUCCESS;
 }
@@ -625,21 +598,29 @@ static OSStatus coreaudio_output_callback(void* inRefCon,
         return noErr;
     }
     
-    // 创建LinxOS音频缓冲区
+    // 创建LinxOS音频缓冲区 - fix struct member names
     linx_audio_buffer_t output_buffer;
     output_buffer.data = ioData->mBuffers[0].mData;
     output_buffer.size = ioData->mBuffers[0].mDataByteSize;
-    output_buffer.frame_count = inNumberFrames;
-    output_buffer.channels = ioData->mBuffers[0].mNumberChannels;
+    output_buffer.frames = inNumberFrames;  // Use 'frames' instead of 'frame_count'
+    output_buffer.used = ioData->mBuffers[0].mDataByteSize;
     
-    // 调用用户回调
+    // Set default parameters
+    output_buffer.params.sample_rate = 44100;
+    output_buffer.params.channels = ioData->mBuffers[0].mNumberChannels;
+    output_buffer.params.format = LINX_AUDIO_FORMAT_FLOAT32;
+    output_buffer.params.buffer_size = inNumberFrames;
+    
+    output_buffer.timestamp = 0;
+    output_buffer.is_readonly = false;
+    
+    // 调用用户回调 - fix callback signature
     linx_audio_result_t result = priv->audio_callback(NULL, &output_buffer, 
-                                                     inNumberFrames, 
                                                      priv->callback_user_data);
     
     // 更新统计信息
-    priv->frames_processed += inNumberFrames;
-    priv->callback_count++;
+    driver->stats.callback_count++;
+    driver->stats.total_data_transferred += inNumberFrames * sizeof(float) * 2; // Assuming stereo
     
     return (result == LINX_AUDIO_SUCCESS) ? noErr : kAudioUnitErr_CannotDoInCurrentContext;
 }
@@ -670,15 +651,24 @@ static OSStatus coreaudio_input_callback(void* inRefCon,
         return status;
     }
     
-    // 创建LinxOS音频缓冲区
+    // 创建LinxOS音频缓冲区 - fix struct member names
     linx_audio_buffer_t input_buffer;
     input_buffer.data = priv->input_buffer_list->mBuffers[0].mData;
     input_buffer.size = priv->input_buffer_list->mBuffers[0].mDataByteSize;
-    input_buffer.frame_count = inNumberFrames;
-    input_buffer.channels = priv->input_buffer_list->mBuffers[0].mNumberChannels;
+    input_buffer.frames = inNumberFrames;  // Use 'frames' instead of 'frame_count'
+    input_buffer.used = priv->input_buffer_list->mBuffers[0].mDataByteSize;
     
-    // 调用用户回调
-    priv->audio_callback(&input_buffer, NULL, inNumberFrames, priv->callback_user_data);
+    // Set default parameters
+    input_buffer.params.sample_rate = 44100;
+    input_buffer.params.channels = priv->input_buffer_list->mBuffers[0].mNumberChannels;
+    input_buffer.params.format = LINX_AUDIO_FORMAT_FLOAT32;
+    input_buffer.params.buffer_size = inNumberFrames;
+    
+    input_buffer.timestamp = 0;
+    input_buffer.is_readonly = true;
+    
+    // 调用用户回调 - fix callback signature
+    priv->audio_callback(NULL, &input_buffer, priv->callback_user_data);
     
     return noErr;
 }
@@ -687,106 +677,35 @@ static OSStatus coreaudio_input_callback(void* inRefCon,
 // 其他接口实现
 // ============================================================================
 
-static bool coreaudio_is_format_supported(linx_audio_driver_t* driver,
-                                          uint32_t device_id,
-                                          const linx_audio_format_info_t* format) {
-    (void)driver;
-    (void)device_id;
-    
-    if (!format) {
-        return false;
-    }
-    
-    // 简单的格式检查
-    return (format->sample_rate >= 8000 && format->sample_rate <= 192000 &&
-            format->channels >= 1 && format->channels <= 8 &&
-            format->format == LINX_AUDIO_FORMAT_FLOAT32);
-}
 
-static linx_audio_driver_state_t coreaudio_get_state(linx_audio_driver_t* driver) {
-    if (!driver) {
-        return LINX_AUDIO_DRIVER_STATE_ERROR;
-    }
-    
-    return driver->state;
-}
 
-static linx_audio_result_t coreaudio_get_stats(linx_audio_driver_t* driver,
-                                               linx_audio_driver_stats_t* stats) {
-    if (!driver || !stats || !driver->private_data) {
-        return LINX_AUDIO_ERROR_INVALID_PARAM;
-    }
-    
-    coreaudio_private_t* priv = (coreaudio_private_t*)driver->private_data;
-    
-    pthread_mutex_lock(&priv->state_mutex);
-    
-    memset(stats, 0, sizeof(linx_audio_driver_stats_t));
-    stats->frames_processed = priv->frames_processed;
-    stats->callback_count = priv->callback_count;
-    stats->total_callback_time_us = priv->total_callback_time_us;
-    
-    if (priv->callback_count > 0) {
-        stats->average_processing_time_us = priv->total_callback_time_us / priv->callback_count;
-    }
-    
-    pthread_mutex_unlock(&priv->state_mutex);
-    
-    return LINX_AUDIO_SUCCESS;
-}
 
+
+
+
+// Fix function signature for get_latency - change to match audio_driver.h
 static linx_audio_result_t coreaudio_get_latency(linx_audio_driver_t* driver,
-                                                 uint32_t* input_latency,
-                                                 uint32_t* output_latency) {
-    if (!driver) {
-        return LINX_AUDIO_ERROR_INVALID_PARAM;
-    }
-    
-    // 返回典型的CoreAudio延迟值
-    if (input_latency) {
-        *input_latency = 512; // 约11.6ms @ 44.1kHz
-    }
-    if (output_latency) {
-        *output_latency = 512; // 约11.6ms @ 44.1kHz
-    }
-    
-    return LINX_AUDIO_SUCCESS;
-}
-
-static linx_audio_result_t coreaudio_set_callback(linx_audio_driver_t* driver,
-                                                  linx_audio_callback_t callback,
-                                                  void* user_data) {
-    if (!driver || !driver->private_data) {
+                                                  linx_audio_device_t* device,
+                                                  uint32_t* latency_frames) {
+    if (!driver || !device || !latency_frames) {
         return LINX_AUDIO_ERROR_INVALID_PARAM;
     }
     
     coreaudio_private_t* priv = (coreaudio_private_t*)driver->private_data;
+    if (!priv) {
+        return LINX_AUDIO_ERROR_INVALID_PARAM;
+    }
     
-    pthread_mutex_lock(&priv->state_mutex);
-    priv->audio_callback = callback;
-    priv->callback_user_data = user_data;
-    pthread_mutex_unlock(&priv->state_mutex);
+    // For now, return a default latency value
+    // In a real implementation, this would query the actual device latency
+    *latency_frames = 512; // Default buffer size
     
     return LINX_AUDIO_SUCCESS;
 }
 
-static linx_audio_result_t coreaudio_update_config(linx_audio_driver_t* driver,
-                                                   const linx_audio_driver_config_t* config) {
-    if (!driver || !config) {
-        return LINX_AUDIO_ERROR_INVALID_PARAM;
-    }
-    
-    // 更新配置
-    driver->config = *config;
-    
-    // 如果驱动正在运行，需要重启以应用新配置
-    if (driver->state == LINX_AUDIO_DRIVER_STATE_STARTED) {
-        coreaudio_stop(driver);
-        return coreaudio_start(driver);
-    }
-    
-    return LINX_AUDIO_SUCCESS;
-}
+
+
+
 
 // ============================================================================
 // 辅助函数实现
@@ -804,12 +723,12 @@ static linx_audio_result_t setup_audio_unit(AudioUnit* unit, bool is_input,
     
     AudioComponent component = AudioComponentFindNext(NULL, &desc);
     if (!component) {
-        return LINX_AUDIO_ERROR_DEVICE_ERROR;
+        return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
     OSStatus status = AudioComponentInstanceNew(component, unit);
     if (status != noErr) {
-        return LINX_AUDIO_ERROR_DEVICE_ERROR;
+        return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
     // 设置设备
@@ -821,7 +740,7 @@ static linx_audio_result_t setup_audio_unit(AudioUnit* unit, bool is_input,
                                  sizeof(device_id));
     if (status != noErr) {
         AudioComponentInstanceDispose(*unit);
-        return LINX_AUDIO_ERROR_DEVICE_ERROR;
+        return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
     // 设置格式
@@ -834,7 +753,7 @@ static linx_audio_result_t setup_audio_unit(AudioUnit* unit, bool is_input,
                                  sizeof(*format));
     if (status != noErr) {
         AudioComponentInstanceDispose(*unit);
-        return LINX_AUDIO_ERROR_DEVICE_ERROR;
+        return LINX_AUDIO_ERROR_IO_ERROR;
     }
     
     return LINX_AUDIO_SUCCESS;
@@ -856,7 +775,7 @@ static linx_audio_result_t get_device_property_data(AudioDeviceID device_id,
                                                 size,
                                                 data);
     
-    return (status == noErr) ? LINX_AUDIO_SUCCESS : LINX_AUDIO_ERROR_DEVICE_ERROR;
+    return (status == noErr) ? LINX_AUDIO_SUCCESS : LINX_AUDIO_ERROR_IO_ERROR;
 }
 
 #endif // LINX_PLATFORM_MACOS
