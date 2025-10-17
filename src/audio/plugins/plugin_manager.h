@@ -230,7 +230,7 @@ struct linx_plugin_manager {
 };
 
 // =============================================================================
-// 插件管理器API
+// 插件管理器核心API
 // =============================================================================
 
 /**
@@ -277,108 +277,10 @@ linx_audio_result_t linx_plugin_manager_start(linx_plugin_manager_t* manager);
 linx_audio_result_t linx_plugin_manager_stop(linx_plugin_manager_t* manager);
 
 // =============================================================================
-// 插件发现和注册API
+// 插件加载管理API
 // =============================================================================
 
-/**
- * @brief 扫描插件目录
- * @param manager 插件管理器
- * @param path 扫描路径
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_scan_directory(linx_plugin_manager_t* manager,
-                                                     const char* path);
 
-/**
- * @brief 注册插件
- * @param manager 插件管理器
- * @param descriptor 插件描述符
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_register_plugin(linx_plugin_manager_t* manager,
-                                                       const linx_plugin_descriptor_t* descriptor);
-
-/**
- * @brief 注销插件
- * @param manager 插件管理器
- * @param name 插件名称
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_unregister_plugin(linx_plugin_manager_t* manager,
-                                                         const char* name);
-
-/**
- * @brief 获取所有插件信息
- * @param manager 插件管理器
- * @param plugins 输出插件信息数组
- * @param count 输出插件数量
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_get_plugins(linx_plugin_manager_t* manager,
-                                                   linx_plugin_info_t*** plugins,
-                                                   uint32_t* count);
-
-/**
- * @brief 根据名称查找插件
- * @param manager 插件管理器
- * @param name 插件名称
- * @return 插件信息，未找到返回NULL
- */
-linx_plugin_info_t* linx_plugin_manager_find_plugin(linx_plugin_manager_t* manager,
-                                                   const char* name);
-
-/**
- * @brief 根据类型查找插件
- * @param manager 插件管理器
- * @param type 插件类型
- * @param plugins 输出插件信息数组
- * @param count 输出插件数量
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_find_plugins_by_type(linx_plugin_manager_t* manager,
-                                                           linx_audio_plugin_type_t type,
-                                                           linx_plugin_info_t*** plugins,
-                                                           uint32_t* count);
-
-// =============================================================================
-// 插件加载和卸载API
-// =============================================================================
-
-/**
- * @brief 加载插件
- * @param manager 插件管理器
- * @param name 插件名称
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_load_plugin(linx_plugin_manager_t* manager,
-                                                   const char* name);
-
-/**
- * @brief 卸载插件
- * @param manager 插件管理器
- * @param name 插件名称
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_unload_plugin(linx_plugin_manager_t* manager,
-                                                     const char* name);
-
-/**
- * @brief 重新加载插件
- * @param manager 插件管理器
- * @param name 插件名称
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_reload_plugin(linx_plugin_manager_t* manager,
-                                                     const char* name);
-
-/**
- * @brief 检查插件是否已加载
- * @param manager 插件管理器
- * @param name 插件名称
- * @return true表示已加载，false表示未加载
- */
-bool linx_plugin_manager_is_plugin_loaded(linx_plugin_manager_t* manager,
-                                         const char* name);
 
 // =============================================================================
 // 插件实例管理API
@@ -406,63 +308,8 @@ linx_audio_result_t linx_plugin_manager_create_instance(linx_plugin_manager_t* m
 linx_audio_result_t linx_plugin_manager_destroy_instance(linx_plugin_manager_t* manager,
                                                         linx_plugin_base_t* instance);
 
-/**
- * @brief 获取所有插件实例
- * @param manager 插件管理器
- * @param instances 输出实例数组
- * @param count 输出实例数量
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_get_instances(linx_plugin_manager_t* manager,
-                                                     linx_plugin_base_t*** instances,
-                                                     uint32_t* count);
-
-/**
- * @brief 根据ID查找插件实例
- * @param manager 插件管理器
- * @param instance_id 实例ID
- * @return 插件实例，未找到返回NULL
- */
-linx_plugin_base_t* linx_plugin_manager_find_instance(linx_plugin_manager_t* manager,
-                                                     uint32_t instance_id);
-
 // =============================================================================
-// 依赖管理API
-// =============================================================================
-
-/**
- * @brief 解析插件依赖
- * @param manager 插件管理器
- * @param name 插件名称
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_resolve_dependencies(linx_plugin_manager_t* manager,
-                                                            const char* name);
-
-/**
- * @brief 检查依赖是否满足
- * @param manager 插件管理器
- * @param name 插件名称
- * @return true表示依赖满足，false表示不满足
- */
-bool linx_plugin_manager_check_dependencies(linx_plugin_manager_t* manager,
-                                           const char* name);
-
-/**
- * @brief 获取插件依赖列表
- * @param manager 插件管理器
- * @param name 插件名称
- * @param dependencies 输出依赖列表
- * @param count 输出依赖数量
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_get_dependencies(linx_plugin_manager_t* manager,
-                                                        const char* name,
-                                                        char*** dependencies,
-                                                        uint32_t* count);
-
-// =============================================================================
-// 配置管理API
+// 配置和统计API
 // =============================================================================
 
 /**
@@ -473,46 +320,6 @@ linx_audio_result_t linx_plugin_manager_get_dependencies(linx_plugin_manager_t* 
 linx_audio_result_t linx_plugin_manager_get_default_config(linx_plugin_manager_config_t* config);
 
 /**
- * @brief 设置管理器配置
- * @param manager 插件管理器
- * @param config 新配置
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_set_config(linx_plugin_manager_t* manager,
-                                                  const linx_plugin_manager_config_t* config);
-
-/**
- * @brief 获取管理器配置
- * @param manager 插件管理器
- * @param config 输出配置
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_get_config(linx_plugin_manager_t* manager,
-                                                  linx_plugin_manager_config_t* config);
-
-/**
- * @brief 添加搜索路径
- * @param manager 插件管理器
- * @param path 搜索路径
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_add_search_path(linx_plugin_manager_t* manager,
-                                                       const char* path);
-
-/**
- * @brief 移除搜索路径
- * @param manager 插件管理器
- * @param path 搜索路径
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_remove_search_path(linx_plugin_manager_t* manager,
-                                                          const char* path);
-
-// =============================================================================
-// 统计和监控API
-// =============================================================================
-
-/**
  * @brief 获取管理器统计信息
  * @param manager 插件管理器
  * @param stats 输出统计信息
@@ -520,49 +327,6 @@ linx_audio_result_t linx_plugin_manager_remove_search_path(linx_plugin_manager_t
  */
 linx_audio_result_t linx_plugin_manager_get_stats(linx_plugin_manager_t* manager,
                                                  linx_plugin_manager_stats_t* stats);
-
-/**
- * @brief 重置管理器统计信息
- * @param manager 插件管理器
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_manager_reset_stats(linx_plugin_manager_t* manager);
-
-/**
- * @brief 获取插件健康状态
- * @param manager 插件管理器
- * @param name 插件名称
- * @return 健康状态
- */
-linx_plugin_status_t linx_plugin_manager_get_plugin_health(linx_plugin_manager_t* manager,
-                                                          const char* name);
-
-// =============================================================================
-// 实用工具函数
-// =============================================================================
-
-/**
- * @brief 插件状态转字符串
- * @param status 插件状态
- * @return 状态字符串
- */
-const char* linx_plugin_status_to_string(linx_plugin_status_t status);
-
-/**
- * @brief 插件加载模式转字符串
- * @param mode 加载模式
- * @return 模式字符串
- */
-const char* linx_plugin_load_mode_to_string(linx_plugin_load_mode_t mode);
-
-/**
- * @brief 验证插件兼容性
- * @param manager 插件管理器
- * @param descriptor 插件描述符
- * @return true表示兼容，false表示不兼容
- */
-bool linx_plugin_manager_validate_compatibility(linx_plugin_manager_t* manager,
-                                               const linx_plugin_descriptor_t* descriptor);
 
 #ifdef __cplusplus
 }

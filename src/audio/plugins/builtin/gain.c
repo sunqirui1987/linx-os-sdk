@@ -6,7 +6,6 @@
 
 #include "../plugin_interface.h"
 #include "../../core/types.h"
-#include "builtin_plugins.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -56,28 +55,22 @@ static void gain_destroy(linx_plugin_base_t* plugin);
 // 插件虚函数表
 // ============================================================================
 
+static linx_plugin_state_t gain_get_state(linx_plugin_base_t* plugin) {
+    if (!plugin) {
+        return PLUGIN_STATE_ERROR;
+    }
+    return plugin->state;
+}
+
 static const linx_plugin_vtable_t gain_vtable = {
     .initialize = gain_initialize,
     .deinitialize = gain_deinitialize,
     .start = gain_start,
     .stop = gain_stop,
-    .pause = NULL,
-    .resume = NULL,
-    .reset = NULL,
     .process = gain_process,
-    .process_inplace = NULL,
-    .set_config = NULL,
-    .get_config = NULL,
     .set_parameter = gain_set_parameter,
     .get_parameter = gain_get_parameter,
-    .set_format = NULL,
-    .get_format = NULL,
-    .supports_format = NULL,
-    .get_latency = NULL,
-    .get_tail_time = NULL,
-    .get_state = NULL,
-    .get_info = NULL,
-    .on_event = NULL,
+    .get_state = gain_get_state,
     .destroy = gain_destroy
 };
 
@@ -309,8 +302,8 @@ linx_plugin_base_t* create_gain_plugin(const linx_plugin_config_t* config) {
         .version = {1, 0, 0, NULL},
         .description = "Audio gain control plugin",
         .author = "LinxOS Audio Team",
-        .license = "MIT",
-        .type = LINX_AUDIO_PLUGIN_TYPE_EFFECT
+        .type = LINX_AUDIO_PLUGIN_TYPE_EFFECT,
+        .capabilities = PLUGIN_CAP_REALTIME | PLUGIN_CAP_MULTI_CHANNEL | PLUGIN_CAP_CONFIGURABLE
     };
     
     linx_audio_result_t result = linx_plugin_base_init(&gain->base, &gain_vtable, &metadata);
@@ -339,24 +332,42 @@ linx_audio_result_t get_gain_plugin_metadata(linx_plugin_metadata_t* metadata) {
     if (!metadata) {
         return LINX_AUDIO_ERROR_INVALID_PARAM;
     }
-    
+
     metadata->name = "Gain";
     metadata->version.major = 1;
     metadata->version.minor = 0;
     metadata->version.patch = 0;
+    metadata->version.build = "stable";
     metadata->description = "Audio gain control plugin";
     metadata->author = "LinxOS Audio Team";
-    metadata->license = "MIT";
     metadata->type = LINX_AUDIO_PLUGIN_TYPE_EFFECT;
-    
+    metadata->capabilities = PLUGIN_CAP_REALTIME | PLUGIN_CAP_MULTI_CHANNEL | PLUGIN_CAP_CONFIGURABLE;
+
     return LINX_AUDIO_SUCCESS;
 }
 
-// 插件自动注册
-LINX_REGISTER_BUILTIN_PLUGIN(gain, 
-                             "Gain", 
-                             "Audio gain control plugin", 
-                             LINX_AUDIO_PLUGIN_TYPE_EFFECT,
-                             create_gain_plugin, 
-                             destroy_gain_plugin, 
-                             get_gain_plugin_metadata);
+// ============================================================================
+// 插件描述符
+// ============================================================================
+
+/**
+ * @brief 获取gain插件描述符
+ * @return 插件描述符指针
+ */
+const linx_plugin_descriptor_t* linx_gain_plugin_get_descriptor(void) {
+    static const linx_plugin_descriptor_t descriptor = {
+        .metadata = {
+            .name = "Gain",
+            .description = "Audio gain control plugin",
+            .author = "LinxOS Audio Team",
+            .version = {1, 0, 0, "stable"},
+            .type = LINX_AUDIO_PLUGIN_TYPE_EFFECT,
+            .capabilities = PLUGIN_CAP_REALTIME | PLUGIN_CAP_INPLACE | PLUGIN_CAP_MULTI_CHANNEL | PLUGIN_CAP_CONFIGURABLE
+        },
+        .create = create_gain_plugin,
+        .destroy = destroy_gain_plugin,
+        .get_metadata = get_gain_plugin_metadata
+    };
+    
+    return &descriptor;
+}

@@ -14,7 +14,7 @@
 #include "../core/audio_manager.h"
 #include "../drivers/audio_driver.h"
 #include "../pipeline/audio_pipeline.h"
-#include "../plugins/builtin/builtin_plugins.h"
+#include "../plugins/builtin/gain.h"
 #include "../utils/audio_utils.h"
 
 // ============================================================================
@@ -151,15 +151,10 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
     
-    // 4. 初始化内置插件系统
-    printf("4. 初始化插件系统...\n");
-    
-    result = linx_builtin_plugins_initialize();
-    if (result != LINX_AUDIO_SUCCESS) {
-        fprintf(stderr, "错误: 插件系统初始化失败: %d\n", result);
-        linx_audio_driver_destroy(driver);
-        goto cleanup;
-    }
+    // 4. 插件系统准备就绪
+    printf("4. 插件系统准备就绪...\n");
+    // 新的插件系统不需要全局初始化
+    // 插件通过描述符按需加载
     
     // 5. 启动音频驱动
     printf("5. 启动音频播放...\n");
@@ -194,7 +189,6 @@ int main(int argc, char* argv[]) {
     
     // 清理资源
     linx_audio_driver_destroy(driver);
-    linx_builtin_plugins_cleanup();
     
 cleanup:
     if (g_pipeline) {

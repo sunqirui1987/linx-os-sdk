@@ -2,6 +2,7 @@
 #define LINX_AUDIO_PLUGINS_PLUGIN_INTERFACE_H
 
 #include "../core/types.h"
+#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,13 +27,9 @@ typedef struct {
     const char* name;
     const char* description;
     const char* author;
-    const char* license;
     linx_plugin_version_t version;
-    linx_plugin_version_t api_version;
     linx_audio_plugin_type_t type;
     uint32_t capabilities;
-    const char** supported_formats;
-    uint32_t format_count;
 } linx_plugin_metadata_t;
 
 // ============================================================================
@@ -60,8 +57,7 @@ typedef enum {
     PLUGIN_STATE_LOADED = 1,
     PLUGIN_STATE_INITIALIZED = 2,
     PLUGIN_STATE_RUNNING = 3,
-    PLUGIN_STATE_PAUSED = 4,
-    PLUGIN_STATE_ERROR = 5
+    PLUGIN_STATE_ERROR = 4
 } linx_plugin_state_t;
 
 // ============================================================================
@@ -69,15 +65,9 @@ typedef enum {
 // ============================================================================
 
 #define PLUGIN_CAP_REALTIME         (1 << 0)   // 支持实时处理
-#define PLUGIN_CAP_OFFLINE          (1 << 1)   // 支持离线处理
-#define PLUGIN_CAP_INPLACE          (1 << 2)   // 支持原地处理
-#define PLUGIN_CAP_VARIABLE_SIZE    (1 << 3)   // 支持可变缓冲区大小
-#define PLUGIN_CAP_MULTI_CHANNEL    (1 << 4)   // 支持多声道
-#define PLUGIN_CAP_CONFIGURABLE     (1 << 5)   // 支持运行时配置
-#define PLUGIN_CAP_STATEFUL         (1 << 6)   // 有状态处理
-#define PLUGIN_CAP_THREAD_SAFE      (1 << 7)   // 线程安全
-#define PLUGIN_CAP_ZERO_LATENCY     (1 << 8)   // 零延迟
-#define PLUGIN_CAP_ADAPTIVE         (1 << 9)   // 自适应处理
+#define PLUGIN_CAP_INPLACE          (1 << 1)   // 支持原地处理
+#define PLUGIN_CAP_MULTI_CHANNEL    (1 << 2)   // 支持多声道
+#define PLUGIN_CAP_CONFIGURABLE     (1 << 3)   // 支持运行时配置
 
 // ============================================================================
 // 插件基础接口
@@ -91,39 +81,18 @@ typedef struct {
     linx_audio_result_t (*deinitialize)(linx_plugin_base_t* plugin);
     linx_audio_result_t (*start)(linx_plugin_base_t* plugin);
     linx_audio_result_t (*stop)(linx_plugin_base_t* plugin);
-    linx_audio_result_t (*pause)(linx_plugin_base_t* plugin);
-    linx_audio_result_t (*resume)(linx_plugin_base_t* plugin);
-    linx_audio_result_t (*reset)(linx_plugin_base_t* plugin);
     
     // 数据处理
     linx_audio_result_t (*process)(linx_plugin_base_t* plugin,
                              const linx_audio_buffer_t* input,
                              linx_audio_buffer_t* output);
     
-    linx_audio_result_t (*process_inplace)(linx_plugin_base_t* plugin,
-                                     linx_audio_buffer_t* buffer);
-    
     // 配置管理
-    linx_audio_result_t (*set_config)(linx_plugin_base_t* plugin, const linx_plugin_config_t* config);
-    linx_audio_result_t (*get_config)(linx_plugin_base_t* plugin, linx_plugin_config_t* config);
     linx_audio_result_t (*set_parameter)(linx_plugin_base_t* plugin, const char* name, const char* value);
     linx_audio_result_t (*get_parameter)(linx_plugin_base_t* plugin, const char* name, char* value, size_t size);
     
-    // 格式支持
-    linx_audio_result_t (*set_format)(linx_plugin_base_t* plugin, const linx_audio_format_info_t* format);
-    linx_audio_result_t (*get_format)(linx_plugin_base_t* plugin, linx_audio_format_info_t* format);
-    bool (*supports_format)(linx_plugin_base_t* plugin, const linx_audio_format_info_t* format);
-    
-    // 延迟信息
-    linx_audio_result_t (*get_latency)(linx_plugin_base_t* plugin, uint32_t* latency_frames);
-    linx_audio_result_t (*get_tail_time)(linx_plugin_base_t* plugin, uint32_t* tail_frames);
-    
     // 状态查询
     linx_plugin_state_t (*get_state)(linx_plugin_base_t* plugin);
-    linx_audio_result_t (*get_info)(linx_plugin_base_t* plugin, const char* key, char* value, size_t size);
-    
-    // 事件处理
-    linx_audio_result_t (*on_event)(linx_plugin_base_t* plugin, const linx_audio_event_t* event);
     
     // 清理
     void (*destroy)(linx_plugin_base_t* plugin);
@@ -136,38 +105,28 @@ typedef struct {
 struct linx_plugin_base {
     // 虚函数表
     const linx_plugin_vtable_t* vtable;
-    
+
     // 元数据
     linx_plugin_metadata_t metadata;
-    
+
     // 状态
     linx_plugin_state_t state;
-    
+
     // 配置
     linx_plugin_config_t config;
-    
-    // 格式信息
-    linx_audio_format_info_t input_format;
-    linx_audio_format_info_t output_format;
-    
+
     // 统计信息
     struct {
         uint64_t frames_processed;
-        uint64_t processing_time_us;
         uint32_t error_count;
-        uint32_t underrun_count;
-        uint32_t overrun_count;
     } stats;
-    
-    // 事件回调
-    linx_audio_event_callback_t event_callback;
-    void* event_user_data;
-    
+
     // 私有数据
     void* private_data;
-    
-    // 引用计数
+
+    // 引用计数和锁
     uint32_t ref_count;
+    pthread_mutex_t ref_count_mutex;
 };
 
 // ============================================================================
@@ -189,28 +148,7 @@ typedef struct {
     linx_plugin_get_metadata_func_t get_metadata;
 } linx_plugin_descriptor_t;
 
-// ============================================================================
-// 插件导出宏
-// ============================================================================
 
-#define PLUGIN_EXPORT __attribute__((visibility("default")))
-
-#define DECLARE_PLUGIN(name) \
-    PLUGIN_EXPORT linx_plugin_base_t* create_##name##_plugin(const linx_plugin_config_t* config); \
-    PLUGIN_EXPORT void destroy_##name##_plugin(linx_plugin_base_t* plugin); \
-    PLUGIN_EXPORT linx_audio_result_t get_##name##_plugin_metadata(linx_plugin_metadata_t* metadata); \
-    PLUGIN_EXPORT const linx_plugin_descriptor_t* get_plugin_descriptor(void)
-
-#define IMPLEMENT_PLUGIN(name) \
-    PLUGIN_EXPORT const linx_plugin_descriptor_t* get_plugin_descriptor(void) { \
-        static linx_plugin_descriptor_t descriptor = { \
-            .create = create_##name##_plugin, \
-            .destroy = destroy_##name##_plugin, \
-            .get_metadata = get_##name##_plugin_metadata \
-        }; \
-        get_##name##_plugin_metadata(&descriptor.metadata); \
-        return &descriptor; \
-    }
 
 // ============================================================================
 // 插件基础API
@@ -229,51 +167,21 @@ linx_audio_result_t linx_plugin_base_init(linx_plugin_base_t* plugin,
 
 /**
  * @brief 增加插件引用计数
- * @param plugin 插件指针
+ * @param plugin 插件实例
  * @return 新的引用计数
  */
 uint32_t linx_plugin_base_ref(linx_plugin_base_t* plugin);
 
 /**
  * @brief 减少插件引用计数
- * @param plugin 插件指针
+ * @param plugin 插件实例
  * @return 新的引用计数
  */
 uint32_t linx_plugin_base_unref(linx_plugin_base_t* plugin);
 
-/**
- * @brief 设置插件事件回调
- * @param plugin 插件指针
- * @param callback 事件回调函数
- * @param user_data 用户数据
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_base_set_event_callback(linx_plugin_base_t* plugin,
-                                             linx_audio_event_callback_t callback,
-                                             void* user_data);
-
-/**
- * @brief 发送插件事件
- * @param plugin 插件指针
- * @param event 事件指针
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_base_send_event(linx_plugin_base_t* plugin, const linx_audio_event_t* event);
-
-/**
- * @brief 获取插件统计信息
- * @param plugin 插件指针
- * @param stats 统计信息指针
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_base_get_stats(const linx_plugin_base_t* plugin, void* stats);
-
-/**
- * @brief 重置插件统计信息
- * @param plugin 插件指针
- * @return 操作结果
- */
-linx_audio_result_t linx_plugin_base_reset_stats(linx_plugin_base_t* plugin);
+// ============================================================================
+// 插件配置管理
+// ============================================================================
 
 // ============================================================================
 // 插件配置工具

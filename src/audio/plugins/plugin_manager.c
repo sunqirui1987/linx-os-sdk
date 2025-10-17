@@ -12,7 +12,6 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <dlfcn.h>
-#include <dirent.h>
 #include <time.h>
 
 // ============================================================================
@@ -23,7 +22,6 @@
 #define PLUGIN_MANAGER_VERSION_MINOR    0
 #define PLUGIN_MANAGER_VERSION_PATCH    0
 
-#define MAX_PLUGIN_PATH_LENGTH          512
 #define MAX_PLUGIN_INSTANCES            64
 
 // ============================================================================
@@ -66,7 +64,7 @@ static const linx_plugin_manager_config_t DEFAULT_CONFIG = {
 };
 
 // ============================================================================
-// 公共API实现
+// 核心API实现
 // ============================================================================
 
 linx_plugin_manager_t* linx_plugin_manager_create(struct audio_manager* manager, 
@@ -211,7 +209,7 @@ linx_audio_result_t linx_plugin_manager_initialize(linx_plugin_manager_t* manage
     memset(&manager->stats, 0, sizeof(linx_plugin_manager_stats_t));
     
     pthread_mutex_unlock(&manager->mutex);
-    return LINX_AUDIO_ERROR_NOT_INITIALIZED;
+    return LINX_AUDIO_SUCCESS;
 }
 
 linx_audio_result_t linx_plugin_manager_deinitialize(linx_plugin_manager_t* manager)
@@ -259,6 +257,12 @@ linx_audio_result_t linx_plugin_manager_stop(linx_plugin_manager_t* manager)
     pthread_mutex_unlock(&manager->mutex);
     return LINX_AUDIO_SUCCESS;
 }
+
+
+
+// ============================================================================
+// 插件实例管理API实现
+// ============================================================================
 
 linx_audio_result_t linx_plugin_manager_create_instance(linx_plugin_manager_t* manager,
                                               const char* name,
@@ -356,9 +360,6 @@ linx_audio_result_t linx_plugin_manager_destroy_instance(linx_plugin_manager_t* 
         return LINX_AUDIO_ERROR_NOT_FOUND;
     }
     
-    // 获取实例ID
-    //uint32_t instance_id = (uint32_t)(uintptr_t)instance->private_data;
-    
     // 减少引用计数
     uint32_t ref_count = linx_plugin_base_unref(instance);
     
@@ -383,6 +384,20 @@ linx_audio_result_t linx_plugin_manager_destroy_instance(linx_plugin_manager_t* 
     remove_instance_from_array(manager, instance_index);
     
     pthread_mutex_unlock(&manager->mutex);
+    return LINX_AUDIO_SUCCESS;
+}
+
+// ============================================================================
+// 配置和统计API实现
+// ============================================================================
+
+linx_audio_result_t linx_plugin_manager_get_default_config(linx_plugin_manager_config_t* config)
+{
+    if (!config) {
+        return LINX_AUDIO_ERROR_INVALID_PARAM;
+    }
+    
+    *config = DEFAULT_CONFIG;
     return LINX_AUDIO_SUCCESS;
 }
 
