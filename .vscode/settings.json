@@ -101,7 +101,10 @@
         "cjson.h": "c",
         "set": "cpp",
         "plugin_manager.h": "c",
-        "plugin_interface.h": "c"
+        "plugin_interface.h": "c",
+        "pthread.h": "c",
+        "log.h": "c",
+        "http.h": "c"
     },
     
 
@@ -118,5 +121,6 @@
         "${workspaceFolder}/src/audio/audio",
         "${workspaceFolder}/board/mac/common/audio",
         "${workspaceFolder}/board/mac/common"
-    ]
+    ],
+    "cmake.sourceDirectory": "/Users/sunqirui/gitlab/aiagent/linx-os-sdk/src/linxsdk"
 }

@@ -10,13 +10,14 @@ LDFLAGS = -lm -lpthread
 PROTOCOLS_DIR = ../
 EXAMPLES_DIR = .
 BUILD_DIR = build
-CJSON_DIR = ../../cjson
-LOG_DIR = ../../log
+CJSON_DIR = ../../../common/cjson
+LOG_DIR = ../../../common/log
 
 # 源文件
 PROTOCOL_SOURCES = $(PROTOCOLS_DIR)/linx_protocol.c $(PROTOCOLS_DIR)/linx_websocket.c
 CJSON_SOURCES = $(CJSON_DIR)/cJSON.c $(CJSON_DIR)/cJSON_Utils.c
 LOG_SOURCES = $(LOG_DIR)/linx_log.c
+MONGOOSE_SOURCES = ../../../third/mongoose/mongoose.c
 EXAMPLE_WEBSOCKET_SRC = example_linx_websocket.c
 
 # 目标文件
@@ -140,19 +141,12 @@ $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
 # 编译 linx_websocket 示例
-$(EXAMPLE_WEBSOCKET_TARGET): $(EXAMPLE_WEBSOCKET_SRC) $(PROTOCOL_SOURCES) $(CJSON_SOURCES) $(LOG_SOURCES) | $(BUILD_DIR)
+$(EXAMPLE_WEBSOCKET_TARGET): $(EXAMPLE_WEBSOCKET_SRC) $(PROTOCOL_SOURCES) $(CJSON_SOURCES) $(LOG_SOURCES) $(MONGOOSE_SOURCES) | $(BUILD_DIR)
 	@echo "🔨 编译 linx_websocket 示例..."
 	@echo "源文件: $<"
-	@echo "依赖: $(PROTOCOL_SOURCES) $(CJSON_SOURCES) $(LOG_SOURCES)"
-	@if [ "$(MONGOOSE_FOUND)" != "1" ]; then \
-		echo "❌ 错误: 未找到 mongoose 库"; \
-		echo "请运行 'make install-deps' 查看安装方法"; \
-		exit 1; \
-	else \
-		echo "使用 mongoose: $(MONGOOSE_CFLAGS) $(MONGOOSE_LIBS)"; \
-		$(CC) $(CFLAGS) $(INCLUDES) $(MONGOOSE_CFLAGS) -o $@ $< $(PROTOCOL_SOURCES) $(CJSON_SOURCES) $(LOG_SOURCES) $(LDFLAGS) $(MONGOOSE_LIBS); \
-		echo "✅ linx_websocket 示例编译完成: $@"; \
-	fi
+	@echo "依赖: $(PROTOCOL_SOURCES) $(CJSON_SOURCES) $(LOG_SOURCES) $(MONGOOSE_SOURCES)"
+	$(CC) $(CFLAGS) $(INCLUDES) -I../../../third/mongoose -o $@ $< $(PROTOCOL_SOURCES) $(CJSON_SOURCES) $(LOG_SOURCES) $(MONGOOSE_SOURCES) $(LDFLAGS)
+	@echo "✅ linx_websocket 示例编译完成: $@"
 
 # 运行 linx_websocket 示例
 run-websocket: $(EXAMPLE_WEBSOCKET_TARGET)

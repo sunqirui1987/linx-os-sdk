@@ -16,6 +16,10 @@
 #include <time.h>
 #include "linx_websocket.h"
 
+// 音频参数定义
+#define LINX_WEBSOCKET_AUDIO_SAMPLE_RATE 16000
+#define LINX_WEBSOCKET_AUDIO_FRAME_DURATION 20
+
 // ==================== 全局状态管理 ====================
 
 /**
@@ -179,6 +183,7 @@ static void signal_handler(int sig) {
 // ==================== WebSocket 回调函数 ====================
 
 static void on_websocket_connected(void* user_data) {
+    (void)user_data; // 消除未使用参数警告
     printf("🔗 WebSocket 连接已建立\n");
     pthread_mutex_lock(&g_app_state.state_mutex);
     g_app_state.connected = true;
@@ -186,6 +191,7 @@ static void on_websocket_connected(void* user_data) {
 }
 
 static void on_websocket_disconnected(void* user_data) {
+    (void)user_data; // 消除未使用参数警告
     printf("🔌 WebSocket 连接已断开\n");
     pthread_mutex_lock(&g_app_state.state_mutex);
     g_app_state.connected = false;
@@ -193,11 +199,13 @@ static void on_websocket_disconnected(void* user_data) {
     set_app_running(false);
 }
 
-static void on_websocket_error(const char* error_msg, void* user_data) {
-    printf("❌ WebSocket 错误: %s\n", error_msg);
+static void on_websocket_error(const char* error, void* user_data) {
+    (void)user_data; // 消除未使用参数警告
+    printf("❌ WebSocket 错误: %s\n", error);
 }
 
 static void on_websocket_message(const cJSON* root, void* user_data) {
+    (void)user_data; // 消除未使用参数警告
     char* json_string = cJSON_Print(root);
     if (json_string) {
         printf("📨 收到消息: %s\n", json_string);
@@ -250,6 +258,7 @@ static void on_websocket_message(const cJSON* root, void* user_data) {
 }
 
 static void on_websocket_audio_data(linx_audio_stream_packet_t* packet, void* user_data) {
+    (void)user_data; // 消除未使用参数警告
     printf("🎵 收到音频数据: %zu 字节, 采样率: %d, 帧时长: %d\n", 
            packet->payload_size, packet->sample_rate, packet->frame_duration);
     
@@ -291,113 +300,7 @@ static void* websocket_event_thread(void* arg) {
  * @brief 音频文件发送线程
  */
 static void* audio_record_thread(void* arg) {
-    printf("🎤 音频文件发送线程启动\n");
-    
-    while (is_app_running()) {
-        // 检查是否应该发送音频
-        pthread_mutex_lock(&g_app_state.state_mutex);
-        
-        // // 🐛 调试打印：显示所有相关状态
-        // printf("🐛 [DEBUG] g_app_state 状态检查:\n");
-        // printf("🐛   - connected: %s\n", g_app_state.connected ? "true" : "false");
-        // printf("🐛   - listen_state: %s\n", g_app_state.listen_state ? g_app_state.listen_state : "NULL");
-        // printf("🐛   - input_file: %s\n", g_app_state.input_file ? "NOT NULL" : "NULL");
-        // printf("🐛   - g_ws_protocol: %s\n", g_ws_protocol ? "NOT NULL" : "NULL");
-        
-        bool should_send = g_app_state.connected && 
-                          g_app_state.listen_state && 
-                          strcmp(g_app_state.listen_state, "start") == 0 &&
-                          g_app_state.input_file;
-        
-       // printf("🐛   - should_send 结果: %s\n", should_send ? "true" : "false");
-        
-        pthread_mutex_unlock(&g_app_state.state_mutex);
-        //printf("🎤 音频文件发送线程启动》〉》〉》〉》〉》〉》\n");
-        
-        if (should_send && g_ws_protocol) {
-            //等一会再发送
-            usleep(6000000); // 6000ms
 
-            printf("📤 开始发送音频文件...\n");
-            
-            // 重置文件指针到开头
-            pthread_mutex_lock(&g_app_state.state_mutex);
-            if (g_app_state.input_file) {
-                fseek(g_app_state.input_file, 0, SEEK_SET);
-            }
-            pthread_mutex_unlock(&g_app_state.state_mutex);
-            
-            // 发送整个文件
-            const size_t chunk_size = 4096; // 每次读取的字节数
-            uint8_t buffer[chunk_size];
-            size_t total_sent = 0;
-            
-            while (is_app_running()) {
-                pthread_mutex_lock(&g_app_state.state_mutex);
-                size_t bytes_read = 0;
-                if (g_app_state.input_file) {
-                    bytes_read = fread(buffer, 1, chunk_size, g_app_state.input_file);
-                }
-                pthread_mutex_unlock(&g_app_state.state_mutex);
-                
-                if (bytes_read == 0) {
-                    // 文件读取完毕
-                    break;
-                }
-                
-                // 创建音频包并发送
-                linx_audio_stream_packet_t* packet = linx_audio_stream_packet_create(bytes_read);
-                if (packet) {
-                    packet->sample_rate = LINX_WEBSOCKET_AUDIO_SAMPLE_RATE;
-                    packet->frame_duration = LINX_WEBSOCKET_AUDIO_FRAME_DURATION;
-                    packet->timestamp = time(NULL) * 1000;
-                    
-                    // 复制从文件读取的数据
-                    memcpy(packet->payload, buffer, bytes_read);
-                    
-                    // 打印音频数据信息
-                    printf("📊 音频包信息:\n");
-                    printf("   - 采样率: %d Hz\n", packet->sample_rate);
-                    printf("   - 帧时长: %d ms\n", packet->frame_duration);
-                    printf("   - 时间戳: %llu\n", packet->timestamp);
-                    printf("   - 数据大小: %zu 字节\n", packet->payload_size);
-                    
-                    // 打印前32字节的十六进制数据（如果数据足够长）
-                    size_t print_size = packet->payload_size > 32 ? 32 : packet->payload_size;
-                    printf("   - 数据内容 (前%zu字节): ", print_size);
-                    for (size_t i = 0; i < print_size; i++) {
-                        printf("%02X ", ((unsigned char*)packet->payload)[i]);
-                        if ((i + 1) % 16 == 0) printf("\n                                ");
-                    }
-                    printf("\n");
-                    
-                    if (linx_websocket_send_audio((linx_protocol_t*)g_ws_protocol, packet)) {
-                        total_sent += packet->payload_size;
-                        //printf("🎵 发送音频数据: %zu 字节 (总计: %zu 字节)\n", packet->payload_size, total_sent);
-                    } else {
-                        printf("❌ 发送音频数据失败\n");
-                    }
-                    
-                    linx_audio_stream_packet_destroy(packet);
-                }
-                
-                usleep(LINX_WEBSOCKET_AUDIO_FRAME_DURATION * 1000); // 音频帧间隔，转换为微秒
-            }
-            
-            printf("✅ 音频文件发送完成，总计发送: %zu 字节\n", total_sent);
-            printf("⏰ 等待1分钟后再次发送...\n");
-            
-            // 等待1分钟
-            for (int i = 0; i < 60 && is_app_running(); i++) {
-                sleep(1);
-            }
-        } else {
-            // 如果不满足发送条件，短暂等待
-            usleep(1000000); // 1000ms
-        }
-    }
-    
-    printf("🎤 音频文件发送线程退出\n");
     return NULL;
 }
 
@@ -445,6 +348,8 @@ int main() {
     printf("🚀 Linx WebSocket 长连接应用\n");
     printf("============================\n\n");
 
+  
+
      // 初始化日志系统
     log_config_t log_config = LOG_DEFAULT_CONFIG;
     log_config.level = LOG_LEVEL_DEBUG;  // 默认INFO级别
@@ -483,7 +388,7 @@ int main() {
     //"ws://114.66.50.145:8000/xiaozhi/v1/",// "
     //"ws://114.66.50.145:8000/xiaozhi/v1/",// 
     linx_websocket_config_t config = {
-        .url = "ws://xrobo-io.qiniuapi.com/v1/ws/",
+        .url ="ws://xrobo-io.qiniuapi.com/v1/ws/",// "ws://xrobo-io.qiniuapi.com/v1beta/ws/",
         .auth_token = "test-token",
         .device_id = "98:a3:16:f9:d9:34",
         .client_id = "test-client",
@@ -529,20 +434,8 @@ int main() {
         goto cleanup;
     }
     
-    if (pthread_create(&audio_record_thread_id, NULL, audio_record_thread, NULL) != 0) {
-        fprintf(stderr, "❌ 创建音频录制线程失败\n");
-        goto cleanup;
-    }
-    
-    if (pthread_create(&audio_playback_thread_id, NULL, audio_playback_thread, NULL) != 0) {
-        fprintf(stderr, "❌ 创建音频播放线程失败\n");
-        goto cleanup;
-    }
-    
-    if (pthread_create(&status_thread, NULL, status_monitor_thread, NULL) != 0) {
-        fprintf(stderr, "❌ 创建状态监控线程失败\n");
-        goto cleanup;
-    }
+
+
     
     printf("✅ 所有工作线程启动成功\n\n");
 

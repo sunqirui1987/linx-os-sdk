@@ -77,7 +77,7 @@ linx_websocket_protocol_t* linx_websocket_protocol_create(const linx_websocket_c
     linx_protocol_init(&ws_protocol->base, &linx_websocket_vtable);
     
     //设置log等级
-    mg_log_set(MG_LL_INFO);
+    //mg_log_set(MG_LL_VERBOSE); //mg_log_set(MG_LL_DEBUG);
     /* Initialize mongoose manager */
     mg_mgr_init(&ws_protocol->mgr);
     
@@ -531,7 +531,13 @@ bool linx_websocket_start(linx_protocol_t* protocol) {
         char client_header[256];
         snprintf(client_header, sizeof(client_header), "Client-Id: %s\r\n", ws_protocol->client_id);
         strncat(headers, client_header, sizeof(headers) - strlen(headers) - 1);
+
+
+        snprintf(client_header, sizeof(client_header), "Sqr-Client-Id: %s\r\n", ws_protocol->client_id);
+        strncat(headers, client_header, sizeof(headers) - strlen(headers) - 1);
     }
+
+    
     
     ws_protocol->conn = mg_ws_connect(&ws_protocol->mgr, ws_protocol->server_url, 
                                      linx_websocket_event_handler, ws_protocol, 
